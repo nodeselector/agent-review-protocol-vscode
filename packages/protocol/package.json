@@ -1,0 +1,19 @@
+{
+  "name": "@arp/protocol",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "../../dist/protocol/src/index.js",
+  "types": "../../dist/protocol/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "../../dist/protocol/src/index.d.ts",
+      "default": "../../dist/protocol/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

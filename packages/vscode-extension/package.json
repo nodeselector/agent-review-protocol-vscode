@@ -1,0 +1,41 @@
+{
+  "name": "arp-vscode-extension",
+  "displayName": "Agent Review Protocol",
+  "description": "VS Code client for the Agent Review Protocol",
+  "version": "0.0.1",
+  "publisher": "nodeselector",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:arp.startSession",
+    "onCommand:arp.submitStubReview"
+  ],
+  "main": "../../dist/vscode-extension/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "arp.startSession",
+        "title": "ARP: Start Session"
+      },
+      {
+        "command": "arp.submitStubReview",
+        "title": "ARP: Submit Stub Review"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@arp/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.90.0"
+  }
+}
