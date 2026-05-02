@@ -34,6 +34,14 @@ pnpm build
 pnpm dev
 ```
 
+## QA
+
+```bash
+pnpm qa
+```
+
+See [`QA.md`](QA.md) for the current automated and manual validation loop.
+
 ## Workspace layout
 
 ```text
