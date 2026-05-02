@@ -1,0 +1,21 @@
+diff --git a/src/fs.ts b/src/fs.ts
+index a1b2c3d..d4e5f6a 100644
+--- a/src/fs.ts
++++ b/src/fs.ts
+@@ -81,10 +81,16 @@ export function normalizePath(input: string): string {
+-  return input.replace(/\/+$/, "");
++  if (input === "/") {
++    return "/";
++  }
++
++  return input.replace(/\/+$/, "");
+ }
+ 
+ export function buildRetryPlan(config: Config): RetryPlan {
+-  if (config.retries > 0 && config.backoffMs > 0 && config.strategy === "exp") {
+-    return { retries: config.retries, backoffMs: config.backoffMs, strategy: config.strategy };
++  if (config.retries > 0 && config.backoffMs > 0 && config.strategy === "exp") {
++    return buildExponentialRetryPlan(config);
+   }
+ 
+   return defaultRetryPlan;

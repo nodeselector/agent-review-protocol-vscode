@@ -3,6 +3,7 @@
   "displayName": "Agent Review Protocol",
   "description": "VS Code client for the Agent Review Protocol",
   "version": "0.0.1",
+  "type": "module",
   "publisher": "nodeselector",
   "engines": {
     "vscode": "^1.90.0"

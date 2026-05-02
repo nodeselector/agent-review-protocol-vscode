@@ -1,41 +1,5 @@
 import * as vscode from "vscode";
-import { spawn } from "node:child_process";
-import { type JsonRpcRequest } from "../../protocol/src/index.js";
-
-async function sendJsonRpc(command: string, request: JsonRpcRequest): Promise<unknown> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command, [], { stdio: ["pipe", "pipe", "pipe"] });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", reject);
-
-    child.on("close", (code) => {
-      if (code !== 0 && stderr) {
-        reject(new Error(stderr));
-        return;
-      }
-
-      try {
-        resolve(JSON.parse(stdout.trim()));
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error("invalid JSON-RPC response"));
-      }
-    });
-
-    child.stdin.write(`${JSON.stringify(request)}\n`);
-    child.stdin.end();
-  });
-}
+import { sendJsonRpc } from "./rpc-client.js";
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
