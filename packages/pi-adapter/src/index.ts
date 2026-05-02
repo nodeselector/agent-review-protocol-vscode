@@ -8,6 +8,7 @@ import {
   type JsonRpcSuccess,
   type ReviewSubmitParams,
 } from "../../protocol/src/index.js";
+import { buildPrompt, invokePiForReview, normalizeAssistantTextToRevision } from "./pi-client.js";
 
 const capabilities: Capabilities = {
   supports: {
@@ -33,30 +34,7 @@ function writeMessage(message: unknown): void {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
-function buildPrompt(params: ReviewSubmitParams): string {
-  const comments = params.review.comments
-    .map(
-      (comment: ReviewSubmitParams["review"]["comments"][number]) =>
-        `- ${comment.path}:${comment.line ?? `${comment.startLine}-${comment.endLine}`}: ${comment.body}`,
-    )
-    .join("\n");
-
-  return [
-    "You are participating in the Agent Review Protocol.",
-    `Session: ${params.sessionId}`,
-    `Review event: ${params.review.event}`,
-    params.review.summary ? `Summary: ${params.review.summary}` : undefined,
-    "Comments:",
-    comments || "- none",
-    "Artifact patch:",
-    params.artifact.patch,
-    "Return a structured revision with summary, patch, and per-comment resolutions.",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function handle(request: JsonRpcRequest): void {
+async function handle(request: JsonRpcRequest): Promise<void> {
   switch (request.method) {
     case "capabilities/get":
       writeMessage(success(request.id, capabilities));
@@ -78,13 +56,47 @@ function handle(request: JsonRpcRequest): void {
       return;
     case "review/submit": {
       const params = request.params as ReviewSubmitParams;
-      writeMessage(
-        success(request.id, {
-          adapter: "pi",
-          prompt: buildPrompt(params),
-          note: "Stub only. Next step is invoking pi with structured review input and parsing the response.",
-        }),
-      );
+
+      if (process.env.ARP_PI_ADAPTER_DISABLE_LIVE === "1") {
+        writeMessage(
+          success(request.id, {
+            adapter: "pi",
+            mode: "stub",
+            prompt: buildPrompt(params),
+            revision: normalizeAssistantTextToRevision("Stub mode enabled for testing.", params).revision,
+            note: "Live pi invocation disabled by ARP_PI_ADAPTER_DISABLE_LIVE=1.",
+          }),
+        );
+        return;
+      }
+
+      try {
+        const result = await invokePiForReview(params, process.cwd());
+        writeMessage(
+          success(request.id, {
+            adapter: "pi",
+            mode: "live",
+            prompt: result.prompt,
+            normalized: result.normalized,
+            rawOutput: result.rawOutput,
+            revision: result.revision,
+          }),
+        );
+      } catch (invokeError) {
+        writeMessage(
+          success(request.id, {
+            adapter: "pi",
+            mode: "fallback",
+            prompt: buildPrompt(params),
+            normalized: false,
+            revision: normalizeAssistantTextToRevision(
+              invokeError instanceof Error ? invokeError.message : String(invokeError),
+              params,
+            ).revision,
+            note: "Live pi invocation failed. Returned fallback revision payload.",
+          }),
+        );
+      }
       return;
     }
     default:
@@ -102,10 +114,12 @@ rl.on("line", (line: string) => {
     return;
   }
 
-  try {
-    const message = JSON.parse(line) as JsonRpcRequest;
-    handle(message);
-  } catch (err) {
-    writeMessage(error(null, err instanceof Error ? err.message : "Invalid JSON", -32700));
-  }
+  void (async () => {
+    try {
+      const message = JSON.parse(line) as JsonRpcRequest;
+      await handle(message);
+    } catch (err) {
+      writeMessage(error(null, err instanceof Error ? err.message : "Invalid JSON", -32700));
+    }
+  })();
 });

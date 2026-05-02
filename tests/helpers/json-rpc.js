@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 
-export function runJsonRpc(entrypoint, request, cwd = process.cwd()) {
+export function runJsonRpc(entrypoint, request, cwd = process.cwd(), env = process.env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entrypoint], {
       cwd,
+      env,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

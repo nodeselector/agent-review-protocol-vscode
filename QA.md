@@ -1,11 +1,12 @@
 # QA Process
 
-This repo has two QA loops right now:
+This repo now has three QA tiers:
 
-- automated smoke tests for the reference server and pi adapter
-- manual validation for the VS Code extension scaffold
+- safe automated QA
+- manual stub-mode QA
+- live-mode QA
 
-## Automated loop
+## 1. Safe automated QA
 
 Run this from repo root:
 
@@ -15,60 +16,128 @@ pnpm qa
 
 Current `qa` includes:
 
-1. `pnpm build`
-2. `pnpm typecheck`
-3. `pnpm test`
+1. `pnpm typecheck`
+2. `pnpm test`
 
-## Manual VS Code checklist
+Current automated coverage includes:
+
+- protocol/server smoke tests
+- VS Code RPC client tests
+- git diff artifact tests
+- review store tests
+- pi adapter prompt + normalization tests
+- pi adapter stub-mode smoke test
+- pi adapter fallback-mode smoke test when `pi` is unavailable
+
+## 2. Manual stub-mode QA
+
+This is the default manual path.
 
 ### Prerequisites
 
 - `pnpm install`
 - `pnpm build`
 - `PATH` includes the repo root `node_modules/.bin`
+- export safe adapter mode:
+
+```bash
+export ARP_PI_ADAPTER_DISABLE_LIVE=1
+```
 
 ### Launch extension host
 
 1. Open `packages/vscode-extension/` in VS Code.
 2. Press `F5` to open an Extension Development Host.
-3. In the new window, open any workspace folder and file.
+3. In the new window, open any git workspace folder and file.
 
 ### Validate `ARP: Start Session`
 
 1. Run `ARP: Start Session` from the command palette.
-2. Confirm you get an information message with a JSON-RPC session payload.
-3. Failure modes to note:
-   - no workspace open
-   - `arp-reference-server` not found on PATH
-   - invalid JSON-RPC output
+2. Confirm you get an information message with a local session id and JSON-RPC payload.
 
-### Validate `ARP: Submit Stub Review`
+### Validate draft comment workflow
 
-1. Place the cursor on any line in the active editor.
-2. Run `ARP: Submit Stub Review` from the command palette.
-3. Confirm you get an information message containing:
+1. Put the cursor on a line in an open file.
+2. Run `ARP: Add Draft Comment at Cursor`.
+3. Enter comment text.
+4. Pick a category.
+5. Run `ARP: Show Draft Comments`.
+6. Confirm the generated document lists your comment.
+7. Run `ARP: Clear Draft Comments`.
+8. Run `ARP: Show Draft Comments` again and confirm it says `No draft comments.`
+
+### Validate stub review submit
+
+1. Add one draft comment again.
+2. Ensure the repo has a non-empty `git diff`.
+3. Run `ARP: Submit Stub Review`.
+4. Confirm the opened JSON result contains:
    - `adapter: "pi"`
-   - the current file path
-   - the selected line number
-4. Failure modes to note:
-   - no workspace open
-   - no active editor
-   - `arp-pi-adapter` not found on PATH
+   - `mode: "stub"`
+   - `revision`
+   - the current diff in the prompt body
 
-## What this does not cover yet
+## 3. Live-mode QA
 
-Not covered in this first QA pass:
+This is opt-in and may be slow or disruptive.
 
-- real git diff capture
-- inline comment UI
-- batch review state storage
-- invoking pi end-to-end
-- VS Code integration tests in CI
+### Extra guardrails
 
-## Exit criteria for this stage
+Set a timeout first:
+
+```bash
+export ARP_PI_TIMEOUT_MS=45000
+```
+
+Optionally force a faster model/provider:
+
+```bash
+export ARP_PI_PROVIDER=github-copilot
+export ARP_PI_MODEL='*sonnet*'
+```
+
+Unset stub mode:
+
+```bash
+unset ARP_PI_ADAPTER_DISABLE_LIVE
+```
+
+### Recommended order
+
+1. Validate live adapter from CLI first.
+2. Only after that, validate from the Extension Development Host.
+
+### CLI live check
+
+Use a small diff payload and confirm the adapter returns either:
+
+- `mode: "live"` with `normalized: true|false`, or
+- `mode: "fallback"` with a clear failure note
+
+A fallback result is acceptable for QA at this stage. A hang is not.
+
+### Extension live check
+
+1. Open the Extension Development Host.
+2. Add one draft comment.
+3. Run `ARP: Submit Stub Review`.
+4. Confirm it returns JSON and the editor remains responsive.
+
+## Failure modes to watch
+
+- no workspace open
+- no active editor
+- empty git diff
+- `arp-reference-server` not found on `PATH`
+- `arp-pi-adapter` not found on `PATH`
+- live adapter timeout
+- JSON result opens, but `mode: "fallback"`
+
+## Exit criteria for current MVP stage
 
 This stage is healthy if all of the following are true:
 
 - `pnpm qa` passes locally
-- both extension commands execute in an Extension Development Host
-- command failures are understandable and actionable
+- stub-mode manual flow works end-to-end
+- live mode returns either a bounded live result or a bounded fallback result
+- no command leaves the editor stuck indefinitely

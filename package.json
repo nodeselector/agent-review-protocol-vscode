@@ -10,7 +10,8 @@
     "dev": "pnpm -r --parallel dev",
     "test": "pnpm build && node --test tests/**/*.test.js",
     "typecheck": "pnpm -r typecheck",
-    "qa": "pnpm typecheck && pnpm test"
+    "qa": "pnpm typecheck && pnpm test",
+    "qa:manual": "echo 'See QA.md for manual QA tiers and live-mode checks.'"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

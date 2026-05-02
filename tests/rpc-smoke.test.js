@@ -84,7 +84,7 @@ test("reference server returns stub revision for review submit", async () => {
   assert.equal(revision.resolutions[0]?.status, "needs_clarification");
 });
 
-test("pi adapter returns a prompt-shaped stub response", async () => {
+test("pi adapter returns a stubbed response when live mode is disabled", async () => {
   const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
   const response = await runJsonRpc(
     path.join(repoRoot, "dist/pi-adapter/src/index.js"),
@@ -124,6 +124,10 @@ test("pi adapter returns a prompt-shaped stub response", async () => {
       },
     },
     repoRoot,
+    {
+      ...process.env,
+      ARP_PI_ADAPTER_DISABLE_LIVE: "1",
+    },
   );
 
   assert.equal(response.id, 3);
@@ -132,10 +136,70 @@ test("pi adapter returns a prompt-shaped stub response", async () => {
 
   const result = response.result;
   assert.equal(result.adapter, "pi");
+  assert.equal(result.mode, "stub");
   assert.match(result.prompt, /Session: sess_pi/);
   assert.match(result.prompt, /Review event: comment/);
-  assert.match(result.prompt, /src\/fs.ts:112-130: Extract this branch/);
+  assert.match(result.prompt, /src\/fs.ts:112-130/);
   assert.match(result.prompt, /diff --git a\/src\/fs.ts b\/src\/fs.ts/);
-  assert.match(result.prompt, /return buildExponentialRetryPlan\(config\);/);
-  assert.match(result.note, /Stub only/);
+  assert.match(result.prompt, /Return exactly one JSON object/);
+  assert.match(result.note, /Live pi invocation disabled/);
+  assert.equal(result.revision.resolutions[0]?.status, "needs_clarification");
+});
+
+test("pi adapter returns fallback response when live invocation fails", async () => {
+  const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
+  const response = await runJsonRpc(
+    path.join(repoRoot, "dist/pi-adapter/src/index.js"),
+    {
+      jsonrpc: "2.0",
+      id: 4,
+      method: "review/submit",
+      params: {
+        sessionId: "sess_fallback",
+        review: {
+          event: "comment",
+          summary: "Try live mode",
+          comments: [
+            {
+              id: "c_10",
+              path: "src/fs.ts",
+              side: "new",
+              line: 84,
+              body: "Preserve root slash semantics",
+              category: "blocking",
+              status: "draft",
+            },
+          ],
+        },
+        artifact: {
+          id: "art_10",
+          type: "gitDiff",
+          patch: sampleDiff,
+          changedFiles: [
+            {
+              path: "src/fs.ts",
+              status: "modified",
+            },
+          ],
+        },
+      },
+    },
+    repoRoot,
+    {
+      ...process.env,
+      PATH: "",
+      ARP_PI_TIMEOUT_MS: "1000",
+    },
+  );
+
+  assert.equal(response.id, 4);
+  assert.ok(response.result);
+  assert.deepEqual(response.error, undefined);
+
+  const result = response.result;
+  assert.equal(result.adapter, "pi");
+  assert.equal(result.mode, "fallback");
+  assert.equal(result.normalized, false);
+  assert.match(result.note, /Live pi invocation failed/);
+  assert.equal(result.revision.resolutions[0]?.status, "needs_clarification");
 });
