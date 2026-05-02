@@ -26,6 +26,11 @@ class FakeChild extends EventEmitter {
     this.stdout = new FakeReadable();
     this.stderr = new FakeReadable();
     this.stdin = new FakeWritable();
+    this.killed = false;
+  }
+
+  kill() {
+    this.killed = true;
   }
 }
 
@@ -100,4 +105,19 @@ test("sendJsonRpc rejects on empty successful response", async () => {
     () => sendJsonRpc("arp-reference-server", { jsonrpc: "2.0", id: 4, method: "x" }, { spawnImpl: createSpawnSuccess("") }),
     /invalid JSON-RPC response/,
   );
+});
+
+test("sendJsonRpc rejects on timeout and kills the child process", async () => {
+  let capturedChild;
+  const spawnImpl = () => {
+    capturedChild = new FakeChild();
+    return capturedChild;
+  };
+
+  await assert.rejects(
+    () => sendJsonRpc("arp-reference-server", { jsonrpc: "2.0", id: 5, method: "x" }, { spawnImpl, timeoutMs: 5 }),
+    /timed out waiting for arp-reference-server after 5ms/,
+  );
+
+  assert.equal(capturedChild.killed, true);
 });

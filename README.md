@@ -18,13 +18,15 @@ VS Code extension and reference implementation for the Agent Review Protocol.
 
 ## Status
 
-Scaffold only. This repo currently contains:
+Local prototype. This repo currently contains:
 
 - package workspace layout
 - initial protocol types
-- reference server skeleton
-- VS Code extension skeleton
-- pi adapter skeleton
+- reference server
+- VS Code command-driven review scaffold
+- pi adapter with stub, fallback, and live-gated modes
+- local draft review storage and git diff capture
+- automated QA coverage around the risky paths
 
 ## Development
 
@@ -38,9 +40,27 @@ pnpm dev
 
 ```bash
 pnpm qa
+pnpm qa:manual
 ```
 
-See [`QA.md`](QA.md) for the current automated and manual validation loop.
+See [`QA.md`](QA.md) for safe, stub-mode, and live-mode validation tiers.
+
+## Quick local test
+
+```bash
+pnpm install
+pnpm build
+export ARP_PI_ADAPTER_DISABLE_LIVE=1
+```
+
+Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
+
+1. `ARP: Start Session`
+2. `ARP: Add Draft Comment at Cursor`
+3. `ARP: Show Draft Comments`
+4. `ARP: Submit Stub Review`
+
+You should get a markdown result document plus raw JSON in the ARP output channel.
 
 ## Workspace layout
 

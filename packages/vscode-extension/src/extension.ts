@@ -10,7 +10,11 @@ import {
   loadReviewStore,
 } from "./review-store.js";
 
+const outputChannel = vscode.window.createOutputChannel("ARP");
+
 export function activate(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(outputChannel);
+
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.startSession", async () => {
       const workspaceRoot = getWorkspaceRoot();
@@ -19,17 +23,24 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const localSession = await ensureSession(workspaceRoot);
-      const response = await sendJsonRpc("arp-reference-server", {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "session/create",
-        params: { workspaceRoot },
-      });
+      try {
+        const localSession = await ensureSession(workspaceRoot);
+        const response = await sendJsonRpc(
+          "arp-reference-server",
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "session/create",
+            params: { workspaceRoot },
+          },
+          { timeoutMs: 10000 },
+        );
 
-      void vscode.window.showInformationMessage(
-        `ARP session ready: ${localSession.id} ${JSON.stringify(response)}`,
-      );
+        logJson("startSession", response);
+        void vscode.window.showInformationMessage(`ARP session ready: ${localSession.id}`);
+      } catch (error) {
+        void vscode.window.showErrorMessage(formatCommandError("start session", error));
+      }
     }),
   );
 
@@ -127,32 +138,103 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const response = await sendJsonRpc("arp-pi-adapter", {
-        jsonrpc: "2.0",
-        id: 2,
-        method: "review/submit",
-        params: {
-          sessionId: session.id,
-          review: {
-            event: "comment",
-            summary: "Draft review from VS Code",
-            comments: store.comments,
-          },
-          artifact,
-        },
-      });
+      if (!artifact.patch.trim() || artifact.changedFiles.length === 0) {
+        void vscode.window.showWarningMessage("Current git diff is empty. Make a change before submitting review.");
+        return;
+      }
 
-      const document = await vscode.workspace.openTextDocument({
-        content: JSON.stringify(response, null, 2),
-        language: "json",
-      });
-      await vscode.window.showTextDocument(document, { preview: false });
+      try {
+        const response = await sendJsonRpc(
+          "arp-pi-adapter",
+          {
+            jsonrpc: "2.0",
+            id: 2,
+            method: "review/submit",
+            params: {
+              sessionId: session.id,
+              review: {
+                event: "comment",
+                summary: "Draft review from VS Code",
+                comments: store.comments,
+              },
+              artifact,
+            },
+          },
+          { timeoutMs: 60000 },
+        );
+
+        logJson("submitReview", response);
+        await showReviewResult(response, artifact.changedFiles.length, store.comments.length);
+      } catch (error) {
+        outputChannel.show(true);
+        void vscode.window.showErrorMessage(formatCommandError("submit review", error));
+      }
     }),
   );
 }
 
 function getWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+function formatCommandError(action: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("ENOENT")) {
+    return `Failed to ${action}: required command was not found on PATH.`;
+  }
+
+  return `Failed to ${action}: ${message}`;
+}
+
+function logJson(label: string, value: unknown): void {
+  outputChannel.appendLine(`## ${label}`);
+  outputChannel.appendLine(JSON.stringify(value, null, 2));
+  outputChannel.appendLine("");
+}
+
+async function showReviewResult(response: any, changedFileCount: number, commentCount: number): Promise<void> {
+  const result = response?.result ?? {};
+  const revision = result.revision ?? {};
+  const lines = [
+    "# ARP Review Result",
+    "",
+    `- Adapter: ${result.adapter ?? "unknown"}`,
+    `- Mode: ${result.mode ?? "unknown"}`,
+    `- Changed files: ${changedFileCount}`,
+    `- Comments submitted: ${commentCount}`,
+    `- Normalized: ${String(result.normalized ?? false)}`,
+    "",
+    "## Summary",
+    "",
+    revision.summary ?? result.note ?? "No summary returned.",
+    "",
+    "## Resolutions",
+    "",
+  ];
+
+  const resolutions = Array.isArray(revision.resolutions) ? revision.resolutions : [];
+  if (resolutions.length === 0) {
+    lines.push("- No resolutions returned.");
+  } else {
+    for (const resolution of resolutions) {
+      lines.push(`- ${resolution.commentId}: ${resolution.status}${resolution.note ? ` - ${resolution.note}` : ""}`);
+    }
+  }
+
+  if (Array.isArray(revision.questions) && revision.questions.length > 0) {
+    lines.push("", "## Questions", "");
+    for (const question of revision.questions) {
+      lines.push(`- ${question}`);
+    }
+  }
+
+  lines.push("", "## Raw JSON", "", "```json", JSON.stringify(response, null, 2), "```");
+
+  const document = await vscode.workspace.openTextDocument({
+    content: lines.join("\n"),
+    language: "markdown",
+  });
+  await vscode.window.showTextDocument(document, { preview: false });
 }
 
 export function deactivate(): void {}

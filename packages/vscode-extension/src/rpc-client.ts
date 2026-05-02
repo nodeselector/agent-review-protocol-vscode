@@ -1,21 +1,33 @@
 import { spawn } from "node:child_process";
-import { EventEmitter } from "node:events";
 import { type JsonRpcRequest } from "../../protocol/src/index.js";
 
 export type SpawnLike = typeof spawn;
 
 export interface JsonRpcClientOptions {
   spawnImpl?: SpawnLike;
+  timeoutMs?: number;
 }
 
 export function sendJsonRpc(command: string, request: JsonRpcRequest, options: JsonRpcClientOptions = {}): Promise<unknown> {
   const spawnImpl = options.spawnImpl ?? spawn;
+  const timeoutMs = options.timeoutMs ?? 30000;
 
   return new Promise((resolve, reject) => {
     const child = spawnImpl(command, [], { stdio: ["pipe", "pipe", "pipe"] });
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      child.kill?.();
+      reject(new Error(`timed out waiting for ${command} after ${timeoutMs}ms`));
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk: string | Buffer) => {
       stdout += chunk.toString();
@@ -25,9 +37,24 @@ export function sendJsonRpc(command: string, request: JsonRpcRequest, options: J
       stderr += chunk.toString();
     });
 
-    child.on("error", reject);
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
 
     child.on("close", (code: number | null) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+
       if (code !== 0) {
         reject(new Error(stderr || `process exited with code ${code}`));
         return;
@@ -49,14 +76,4 @@ export function sendJsonRpc(command: string, request: JsonRpcRequest, options: J
     child.stdin.write(`${JSON.stringify(request)}\n`);
     child.stdin.end();
   });
-}
-
-export class MemoryWritable extends EventEmitter {
-  buffer = "";
-
-  write(chunk: string): void {
-    this.buffer += chunk;
-  }
-
-  end(): void {}
 }
