@@ -11,6 +11,9 @@
   "categories": ["Other"],
   "activationEvents": [
     "onCommand:arp.startSession",
+    "onCommand:arp.addDraftComment",
+    "onCommand:arp.showDraftComments",
+    "onCommand:arp.clearDraftComments",
     "onCommand:arp.submitStubReview"
   ],
   "main": "../../dist/vscode-extension/src/extension.js",
@@ -19,6 +22,18 @@
       {
         "command": "arp.startSession",
         "title": "ARP: Start Session"
+      },
+      {
+        "command": "arp.addDraftComment",
+        "title": "ARP: Add Draft Comment at Cursor"
+      },
+      {
+        "command": "arp.showDraftComments",
+        "title": "ARP: Show Draft Comments"
+      },
+      {
+        "command": "arp.clearDraftComments",
+        "title": "ARP: Clear Draft Comments"
       },
       {
         "command": "arp.submitStubReview",

@@ -1,0 +1,93 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { nowIso, type Comment, type Session } from "../../protocol/src/index.js";
+
+export interface ReviewStore {
+  session?: Session;
+  comments: Comment[];
+}
+
+export async function loadReviewStore(workspaceRoot: string): Promise<ReviewStore> {
+  const storePath = getStorePath(workspaceRoot);
+
+  try {
+    const raw = await fs.readFile(storePath, "utf8");
+    return JSON.parse(raw) as ReviewStore;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { comments: [] };
+    }
+
+    throw error;
+  }
+}
+
+export async function saveReviewStore(workspaceRoot: string, store: ReviewStore): Promise<void> {
+  const storePath = getStorePath(workspaceRoot);
+  await fs.mkdir(path.dirname(storePath), { recursive: true });
+  await fs.writeFile(storePath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+}
+
+export async function ensureSession(workspaceRoot: string): Promise<Session> {
+  const store = await loadReviewStore(workspaceRoot);
+  if (store.session) {
+    return store.session;
+  }
+
+  const session: Session = {
+    id: `sess_${randomUUID()}`,
+    workspaceRoot,
+    title: "local draft review",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    session,
+  });
+
+  return session;
+}
+
+export async function addDraftComment(workspaceRoot: string, comment: Omit<Comment, "id" | "status">): Promise<Comment> {
+  const store = await loadReviewStore(workspaceRoot);
+  const draft: Comment = {
+    ...comment,
+    id: `c_${randomUUID()}`,
+    status: "draft",
+  };
+
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    comments: [...store.comments, draft],
+  });
+
+  return draft;
+}
+
+export async function clearDraftComments(workspaceRoot: string): Promise<void> {
+  const store = await loadReviewStore(workspaceRoot);
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    comments: [],
+  });
+}
+
+export function formatDraftComments(comments: Comment[]): string {
+  if (comments.length === 0) {
+    return "No draft comments.";
+  }
+
+  return comments
+    .map((comment, index) => {
+      const line = comment.line ?? `${comment.startLine}-${comment.endLine}`;
+      return `${index + 1}. ${comment.path}:${line} [${comment.category ?? "note"}] ${comment.body}`;
+    })
+    .join("\n");
+}
+
+export function getStorePath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, ".arp", "reviews", "draft-review.json");
+}
