@@ -25,15 +25,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const localSession = await ensureSession(workspaceRoot);
+        const config = getExtensionConfig();
         const response = await sendJsonRpc(
-          "arp-reference-server",
+          config.referenceServerCommand,
           {
             jsonrpc: "2.0",
             id: 1,
             method: "session/create",
             params: { workspaceRoot },
           },
-          { timeoutMs: 10000 },
+          { timeoutMs: config.referenceServerTimeoutMs },
         );
 
         logJson("startSession", response);
@@ -121,6 +122,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      const config = getExtensionConfig();
       const session = await ensureSession(workspaceRoot);
       const store = await loadReviewStore(workspaceRoot);
       if (store.comments.length === 0) {
@@ -145,7 +147,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const response = await sendJsonRpc(
-          "arp-pi-adapter",
+          config.adapterCommand,
           {
             jsonrpc: "2.0",
             id: 2,
@@ -160,7 +162,7 @@ export function activate(context: vscode.ExtensionContext): void {
               artifact,
             },
           },
-          { timeoutMs: 60000 },
+          { timeoutMs: config.adapterTimeoutMs },
         );
 
         logJson("submitReview", response);
@@ -171,10 +173,32 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("arp.showOutput", async () => {
+      outputChannel.show(true);
+    }),
+  );
 }
 
 function getWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+function getExtensionConfig(): {
+  referenceServerCommand: string;
+  adapterCommand: string;
+  referenceServerTimeoutMs: number;
+  adapterTimeoutMs: number;
+} {
+  const config = vscode.workspace.getConfiguration("arp");
+
+  return {
+    referenceServerCommand: config.get<string>("referenceServerCommand", "arp-reference-server"),
+    adapterCommand: config.get<string>("adapterCommand", "arp-pi-adapter"),
+    referenceServerTimeoutMs: config.get<number>("referenceServerTimeoutMs", 10000),
+    adapterTimeoutMs: config.get<number>("adapterTimeoutMs", 60000),
+  };
 }
 
 function formatCommandError(action: string, error: unknown): string {

@@ -14,7 +14,8 @@
     "onCommand:arp.addDraftComment",
     "onCommand:arp.showDraftComments",
     "onCommand:arp.clearDraftComments",
-    "onCommand:arp.submitStubReview"
+    "onCommand:arp.submitStubReview",
+    "onCommand:arp.showOutput"
   ],
   "main": "../../dist/vscode-extension/src/extension.js",
   "contributes": {
@@ -38,8 +39,39 @@
       {
         "command": "arp.submitStubReview",
         "title": "ARP: Submit Stub Review"
+      },
+      {
+        "command": "arp.showOutput",
+        "title": "ARP: Show Output"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Agent Review Protocol",
+      "properties": {
+        "arp.referenceServerCommand": {
+          "type": "string",
+          "default": "arp-reference-server",
+          "description": "Command used to start the ARP reference server."
+        },
+        "arp.adapterCommand": {
+          "type": "string",
+          "default": "arp-pi-adapter",
+          "description": "Command used to start the ARP adapter for review submission."
+        },
+        "arp.referenceServerTimeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "description": "Timeout in milliseconds for reference server RPC calls."
+        },
+        "arp.adapterTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 1000,
+          "description": "Timeout in milliseconds for adapter RPC calls."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

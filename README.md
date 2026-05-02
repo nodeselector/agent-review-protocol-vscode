@@ -62,6 +62,13 @@ Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 
 You should get a markdown result document plus raw JSON in the ARP output channel.
 
+If your binaries are not on `PATH`, configure them in VS Code settings:
+
+- `arp.referenceServerCommand`
+- `arp.adapterCommand`
+- `arp.referenceServerTimeoutMs`
+- `arp.adapterTimeoutMs`
+
 ## Workspace layout
 
 ```text
