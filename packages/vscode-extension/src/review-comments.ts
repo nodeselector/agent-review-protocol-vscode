@@ -50,6 +50,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
 
   async setLatestResult(result: AdapterReviewResult | undefined): Promise<void> {
     this.latestResult = result;
+    await this.refreshChangedFiles();
     await this.refresh();
   }
 
@@ -119,11 +120,15 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       }
     }
 
-    const lastLine = Math.max(document.lineCount - 1, 0);
-    return {
-      enableFileComments: false,
-      ranges: [new vscode.Range(0, 0, lastLine, 0)],
-    };
+    if (document.uri.scheme === "file") {
+      const lastLine = Math.max(document.lineCount - 1, 0);
+      return {
+        enableFileComments: false,
+        ranges: [new vscode.Range(0, 0, lastLine, 0)],
+      };
+    }
+
+    return undefined;
   }
 
   async createOrReply(reply: vscode.CommentReply): Promise<Comment | undefined> {
