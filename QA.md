@@ -80,6 +80,15 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 7. Run `ARP: Clear Draft Comments`.
 8. Run `ARP: Show Draft Comments` again and confirm it says `No draft comments.`
 
+### Validate review overview sidebar
+
+1. Confirm the `ARP Review Overview` view shows:
+   - session state
+   - draft comment count
+   - changed file count
+   - latest result summary
+2. Use the overview actions to start a session or submit a review.
+
 ### Validate review files sidebar
 
 1. Make sure the workspace has a non-empty `git diff`.

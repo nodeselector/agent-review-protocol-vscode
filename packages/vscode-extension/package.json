@@ -131,6 +131,10 @@
     "views": {
       "explorer": [
         {
+          "id": "arpReviewOverview",
+          "name": "ARP Review Overview"
+        },
+        {
           "id": "arpReviewFiles",
           "name": "ARP Review Files"
         }
@@ -173,6 +177,16 @@
           "command": "arp.refreshReviewFiles",
           "group": "navigation",
           "when": "view == arpReviewFiles"
+        },
+        {
+          "command": "arp.startSession",
+          "group": "navigation",
+          "when": "view == arpReviewOverview"
+        },
+        {
+          "command": "arp.submitReview",
+          "group": "navigation",
+          "when": "view == arpReviewOverview"
         }
       ]
     }
