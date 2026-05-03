@@ -24,13 +24,14 @@ Local prototype. This repo currently contains:
 
 - package workspace layout
 - initial protocol types
+
 - reference server
 
 - VS Code command-driven review scaffold
 - bus-backed review submission path via local SQLite as the primary review flow
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
-- active review overview sidebar with session, expandable draft comments, file, and latest result summary plus quick actions
+- active review overview sidebar with session, expandable draft comments, separate context references, file, and latest result summary plus quick actions
 - automatic hydration of latest review result from the bus on activation/workspace switch
 - status bar summary for the active review with one-click jump back into the flow
 - changed-files sidebar for the active review with diff opening against HEAD, draft counts, and result status summaries
@@ -78,8 +79,8 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 
 1. `ARP: Start Session`
-2. `ARP: Add Draft Comment at Cursor` or use `Add ARP draft comment` inline on a changed line
-3. Check `ARP Review Overview` for active session, expandable draft comments, and review status
+2. `ARP: Add Draft Comment at Cursor`, use `Add ARP draft comment` inline on changed lines, or use native comment affordances anywhere in the workspace after a session starts
+3. Check `ARP Review Overview` for active session, expandable draft comments, context references, and review status
 4. Use the `ARP Review Overview` action or `ARP Review Files` view to open the next review file diff
 5. `ARP: Submit Review`
 6. `ARP: Show Latest Bus Revision`

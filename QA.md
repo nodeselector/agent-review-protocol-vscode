@@ -77,9 +77,11 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 4. Pick a category.
 5. Open a changed file and confirm `Add ARP draft comment` appears inline on commentable changed lines.
 6. Confirm the `ARP Review Overview` view expands `Draft comments` and shows the actual draft entries inline in the sidebar.
-7. Click one draft entry and confirm it jumps to the file/line.
-8. Run `ARP: Clear Draft Comments`.
-9. Confirm the `Draft comments` section drops back to `0`.
+7. Add a comment on an unchanged line in any workspace file after starting a session.
+8. Confirm it lands under `Context references` instead of `Review comments`.
+9. Click one draft entry and confirm it jumps to the file/line.
+10. Run `ARP: Clear Draft Comments`.
+11. Confirm the `Draft comments` section drops back to `0`.
 
 ### Validate review overview sidebar
 

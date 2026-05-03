@@ -141,7 +141,7 @@ test("formatDraftComments renders readable output", () => {
     },
   ]);
 
-  assert.match(rendered, /1\. src\/fs.ts:84 \[blocking\] Preserve root slash semantics\./);
+  assert.match(rendered, /1\. src\/fs.ts:84 \[review\/blocking\] Preserve root slash semantics\./);
 });
 
 test("getStorePath uses .arp reviews directory", () => {

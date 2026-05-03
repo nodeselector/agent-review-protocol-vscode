@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { type Comment, type CommentCategory } from "../../protocol/src/index.js";
 import { sendJsonRpc } from "./rpc-client.js";
-import { captureGitDiffArtifact } from "./git-diff.js";
+import { captureGitDiffArtifact, parseCommentingRangesFromPatch } from "./git-diff.js";
 import {
   enqueueDraftReviewToBus,
   getCurrentBusEventSeq,
@@ -108,6 +108,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         logJson("startSession", response);
         reviewCommentCodeLensProvider.setHasActiveSession(true);
+        reviewComments.setHasActiveSession(true);
         void vscode.window.showInformationMessage(`ARP session ready: ${localSession.id}`);
       } catch (error) {
         void vscode.window.showErrorMessage(formatCommandError("start session", error));
@@ -441,6 +442,7 @@ async function initializeReviewUi(
   await providers.reviewStatusBar.setWorkspaceRoot(workspaceRoot);
   providers.reviewCommentCodeLensProvider.setWorkspaceRoot(workspaceRoot);
   providers.reviewCommentCodeLensProvider.setHasActiveSession(false);
+  providers.reviewComments.setHasActiveSession(false);
 
   if (!workspaceRoot) {
     return;
@@ -448,6 +450,7 @@ async function initializeReviewUi(
 
   const hydrated = await hydrateReviewSessionState(workspaceRoot, busDbPath);
   providers.reviewCommentCodeLensProvider.setHasActiveSession(Boolean(hydrated.session));
+  providers.reviewComments.setHasActiveSession(Boolean(hydrated.session));
   await providers.reviewComments.setLatestResult(hydrated.latestResult);
   await providers.reviewFiles.setLatestResult(hydrated.latestResult);
   await providers.reviewOverview.setLatestResult(hydrated.latestResult);
@@ -504,14 +507,21 @@ async function promptAndCreateDraftComment(
     return undefined;
   }
 
+  const relativePath = vscode.workspace.asRelativePath(uri);
+  const artifact = await captureGitDiffArtifact(workspaceRoot);
+  const isReviewRange = parseCommentingRangesFromPatch(artifact.patch, relativePath).some(
+    (patchRange) => range.start.line + 1 >= patchRange.startLine && range.start.line + 1 <= patchRange.endLine,
+  );
+
   return await addDraftComment(workspaceRoot, {
-    path: vscode.workspace.asRelativePath(uri),
+    path: relativePath,
     side: "new",
     line: range.start.line + 1,
     startLine: range.start.line + 1,
     endLine: range.end.line + 1,
     body,
     category,
+    scope: isReviewRange ? "review" : "context",
   });
 }
 

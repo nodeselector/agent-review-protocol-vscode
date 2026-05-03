@@ -1,6 +1,7 @@
 export type ReviewEvent = "comment" | "request_changes" | "ready";
 export type CommentCategory = "note" | "issue" | "blocking";
 export type CommentStatus = "draft" | "submitted" | "resolved" | "outdated";
+export type CommentScope = "review" | "context";
 export type ResolutionStatus =
   | "addressed"
   | "partially_addressed"
@@ -43,6 +44,7 @@ export interface Comment {
   endLine?: number;
   body: string;
   category?: CommentCategory;
+  scope?: CommentScope;
   status: CommentStatus;
 }
 

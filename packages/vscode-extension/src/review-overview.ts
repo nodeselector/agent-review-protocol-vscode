@@ -152,7 +152,27 @@ function buildDraftCommentsNode(draftComments: Comment[]): ReviewOverviewNode {
     });
   }
 
-  const children = draftComments.map((comment) => {
+  const reviewComments = draftComments.filter((comment) => (comment.scope ?? "review") === "review");
+  const contextComments = draftComments.filter((comment) => comment.scope === "context");
+  const children: ReviewOverviewNode[] = [];
+
+  if (reviewComments.length > 0) {
+    children.push(buildDraftCommentGroupNode("Review comments", reviewComments, "comment-discussion"));
+  }
+  if (contextComments.length > 0) {
+    children.push(buildDraftCommentGroupNode("Context references", contextComments, "references"));
+  }
+
+  return new ReviewOverviewNode("Draft comments", {
+    description: String(draftComments.length),
+    icon: "comment-discussion",
+    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+    children,
+  });
+}
+
+function buildDraftCommentGroupNode(label: string, comments: Comment[], icon: string): ReviewOverviewNode {
+  const children = comments.map((comment) => {
     const line = comment.line ?? comment.startLine ?? 1;
     return new ReviewOverviewNode(truncate(comment.body), {
       description: `${comment.path}:${line}`,
@@ -166,9 +186,9 @@ function buildDraftCommentsNode(draftComments: Comment[]): ReviewOverviewNode {
     });
   });
 
-  return new ReviewOverviewNode("Draft comments", {
-    description: String(draftComments.length),
-    icon: "comment-discussion",
+  return new ReviewOverviewNode(label, {
+    description: String(comments.length),
+    icon,
     collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
     children,
   });

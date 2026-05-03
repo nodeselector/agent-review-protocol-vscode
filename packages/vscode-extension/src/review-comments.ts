@@ -20,6 +20,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
   private readonly threads = new Map<string, vscode.CommentThread>();
   private workspaceRoot?: string;
   private latestResult?: AdapterReviewResult;
+  private hasActiveSession = false;
 
   constructor() {
     this.controller = vscode.comments.createCommentController(COMMENT_CONTROLLER_ID, "ARP Review");
@@ -33,6 +34,10 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
   async setWorkspaceRoot(workspaceRoot: string | undefined): Promise<void> {
     this.workspaceRoot = workspaceRoot;
     await this.refresh();
+  }
+
+  setHasActiveSession(hasActiveSession: boolean): void {
+    this.hasActiveSession = hasActiveSession;
   }
 
   async setLatestResult(result: AdapterReviewResult | undefined): Promise<void> {
@@ -76,7 +81,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     document: vscode.TextDocument,
     _token: vscode.CancellationToken,
   ): Promise<vscode.CommentingRanges | undefined> {
-    if (!this.workspaceRoot) {
+    if (!this.workspaceRoot || !this.hasActiveSession) {
       return undefined;
     }
 
@@ -85,16 +90,11 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       return undefined;
     }
 
-    const artifact = await captureGitDiffArtifact(this.workspaceRoot);
-    const ranges = parseCommentingRangesFromPatch(artifact.patch, relativePath).map(
-      (range) => new vscode.Range(range.startLine - 1, 0, range.endLine - 1, 0),
-    );
-
-    if (ranges.length === 0) {
-      return { enableFileComments: false, ranges: [] };
-    }
-
-    return { enableFileComments: false, ranges };
+    const lastLine = Math.max(document.lineCount - 1, 0);
+    return {
+      enableFileComments: false,
+      ranges: [new vscode.Range(0, 0, lastLine, 0)],
+    };
   }
 
   async createOrReply(reply: vscode.CommentReply): Promise<void> {
@@ -118,6 +118,11 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       return;
     }
 
+    const artifact = await captureGitDiffArtifact(this.workspaceRoot);
+    const isReviewRange = parseCommentingRangesFromPatch(artifact.patch, relativePath).some(
+      (patchRange) => range.start.line + 1 >= patchRange.startLine && range.start.line + 1 <= patchRange.endLine,
+    );
+
     await addDraftComment(this.workspaceRoot, {
       path: relativePath,
       side: "new",
@@ -126,6 +131,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       startLine: range.start.line + 1,
       body,
       category: "note",
+      scope: isReviewRange ? "review" : "context",
     });
 
     await this.refresh();
@@ -219,7 +225,7 @@ export class DraftReviewComment implements vscode.Comment {
     this.contextValue = comment.status === "draft" ? COMMENT_CONTEXT_VALUE : "arp-submitted-comment";
     this.body = comment.body;
     this.originalBody = comment.body;
-    this.label = `${comment.status} - ${comment.category ?? "note"}`;
+    this.label = `${comment.scope ?? "review"} - ${comment.status} - ${comment.category ?? "note"}`;
     this.range = toRange(comment);
   }
 
@@ -279,7 +285,8 @@ function asPlainText(body: string | vscode.MarkdownString): string {
 }
 
 function buildThreadLabel(comment: Comment, resolution?: CommentResolution): string {
-  const prefix = comment.status === "draft" ? "ARP draft" : "ARP submitted";
+  const scope = comment.scope === "context" ? "context" : "review";
+  const prefix = comment.status === "draft" ? `ARP ${scope} draft` : `ARP ${scope} submitted`;
   if (!resolution) {
     return `${prefix} - ${comment.category ?? "note"}`;
   }
