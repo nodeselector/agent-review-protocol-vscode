@@ -1,7 +1,7 @@
 /**
  * ARP Review Extension for pi
  *
- * Gives the coding agent a `request_review` tool.
+ * Gives the coding agent a `request_review` tool and `/review` command.
  * When called, it:
  *   1. Captures the current git diff
  *   2. Writes a `review.requested` event to the ARP bus
@@ -11,7 +11,7 @@
  * The agent can then act on the feedback.
  *
  * Environment:
- *   ARP_BUS_DB_PATH - path to the SQLite bus database (required)
+ *   ARP_BUS_DB_PATH - path to the SQLite bus database (auto-derived from cwd if not set)
  *   ARP_REVIEW_POLL_MS - poll interval while waiting for review (default: 2000)
  *   ARP_REVIEW_TIMEOUT_MS - max wait time for review (default: 600000 = 10min)
  */
@@ -21,7 +21,7 @@ import { Type } from "typebox";
 export default function (pi: ExtensionAPI) {
   let busDbPath: string | undefined;
 
-  // -- Bus helpers (inline to avoid import issues in pi's jiti loader) --
+  // -- Bus helpers (inline, schema matches SqliteArpStore exactly) --
 
   function openDb(dbPath: string) {
     const { DatabaseSync } = require("node:sqlite");
@@ -38,17 +38,19 @@ export default function (pi: ExtensionAPI) {
     const db = openDb(dbPath);
     try {
       db.exec(`
-        CREATE TABLE IF NOT EXISTS events (
+        CREATE TABLE IF NOT EXISTS workspaces (
           id TEXT PRIMARY KEY,
-          seq INTEGER UNIQUE,
-          workspace_id TEXT NOT NULL,
-          session_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          producer TEXT NOT NULL,
+          root_path TEXT NOT NULL UNIQUE,
           created_at TEXT NOT NULL,
-          causation_id TEXT,
-          correlation_id TEXT,
-          payload TEXT NOT NULL DEFAULT '{}'
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          metadata_json TEXT
         );
         CREATE TABLE IF NOT EXISTS commands (
           id TEXT PRIMARY KEY,
@@ -59,35 +61,32 @@ export default function (pi: ExtensionAPI) {
           created_at TEXT NOT NULL,
           available_at TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending',
-          claimed_by TEXT,
-          claimed_at TEXT,
-          lease_until TEXT,
-          completed_at TEXT,
-          failed_at TEXT,
-          error_message TEXT,
+          lease_owner TEXT,
+          lease_expires_at TEXT,
           attempt_count INTEGER NOT NULL DEFAULT 0,
           idempotency_key TEXT,
-          payload TEXT NOT NULL DEFAULT '{}'
+          payload_json TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS workspaces (
-          id TEXT PRIMARY KEY,
-          root_path TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-          id TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS events (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          id TEXT NOT NULL UNIQUE,
           workspace_id TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'active',
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          producer TEXT NOT NULL,
           created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          metadata TEXT
+          causation_id TEXT,
+          correlation_id TEXT,
+          payload_json TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS subscription_checkpoints (
-          consumer_name TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS subscriptions (
+          id TEXT PRIMARY KEY,
+          consumer_name TEXT NOT NULL UNIQUE,
           last_event_seq INTEGER NOT NULL DEFAULT 0,
           updated_at TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_commands_claim ON commands(status, available_at, lease_expires_at, workspace_id, type);
+        CREATE INDEX IF NOT EXISTS idx_events_read ON events(seq, workspace_id, session_id, type);
       `);
     } finally {
       db.close();
@@ -135,7 +134,7 @@ export default function (pi: ExtensionAPI) {
       const eventId = `evt_${randomUUID()}`;
 
       db.prepare(
-        `INSERT INTO events (id, workspace_id, session_id, type, producer, created_at, causation_id, correlation_id, payload)
+        `INSERT INTO events (id, workspace_id, session_id, type, producer, created_at, causation_id, correlation_id, payload_json)
          VALUES (?, ?, ?, 'review.requested', 'pi-extension', ?, ?, ?, ?)`
       ).run(
         eventId,
@@ -168,7 +167,7 @@ export default function (pi: ExtensionAPI) {
     pollMs: number,
     timeoutMs: number,
   ): Promise<any | null> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const startTime = Date.now();
 
       const check = () => {
@@ -186,19 +185,19 @@ export default function (pi: ExtensionAPI) {
           const db = openDb(dbPath);
           try {
             const row = db.prepare(
-              `SELECT payload FROM events
+              `SELECT payload_json FROM events
                WHERE session_id = ? AND type = 'review.response' AND correlation_id = ?
                ORDER BY seq DESC LIMIT 1`
             ).get(sessionId, requestId) as any;
 
             if (row) {
-              resolve(JSON.parse(row.payload));
+              resolve(JSON.parse(row.payload_json));
               return;
             }
           } finally {
             db.close();
           }
-        } catch (err) {
+        } catch {
           // retry
         }
 
