@@ -18,6 +18,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
     draftComments: [],
     changedFileCount: 0,
   };
+  private nodes: ReviewOverviewNode[] = [];
 
   async setWorkspaceRoot(workspaceRoot: string | undefined): Promise<void> {
     this.workspaceRoot = workspaceRoot;
@@ -29,13 +30,13 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
       ...this.state,
       latestResult: result,
     };
-    this.onDidChangeTreeDataEmitter.fire(undefined);
+    this.rebuildNodes();
   }
 
   async refresh(): Promise<void> {
     if (!this.workspaceRoot) {
       this.state = { draftComments: [], changedFileCount: 0 };
-      this.onDidChangeTreeDataEmitter.fire(undefined);
+      this.rebuildNodes();
       return;
     }
 
@@ -47,7 +48,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
       draftComments: sortDraftComments(getActiveDraftComments(store)),
       changedFileCount,
     };
-    this.onDidChangeTreeDataEmitter.fire(undefined);
+    this.rebuildNodes();
   }
 
   async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
@@ -63,11 +64,33 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
       return Promise.resolve(element.children ?? []);
     }
 
-    return Promise.resolve(buildOverviewNodes(this.state));
+    return Promise.resolve(this.nodes);
+  }
+
+  findDraftCommentNode(commentId: string): ReviewOverviewNode | undefined {
+    const stack = [...this.nodes];
+    while (stack.length > 0) {
+      const node = stack.shift();
+      if (!node) {
+        continue;
+      }
+      if (node.commentId === commentId) {
+        return node;
+      }
+      if (node.children?.length) {
+        stack.unshift(...node.children);
+      }
+    }
+    return undefined;
   }
 
   dispose(): void {
     this.onDidChangeTreeDataEmitter.dispose();
+  }
+
+  private rebuildNodes(): void {
+    this.nodes = buildOverviewNodes(this.state);
+    this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 }
 
@@ -81,6 +104,8 @@ export class ReviewOverviewNode extends vscode.TreeItem {
       collapsibleState?: vscode.TreeItemCollapsibleState;
       tooltip?: string;
       children?: ReviewOverviewNode[];
+      id?: string;
+      commentId?: string;
     } = {},
   ) {
     super(label, options.collapsibleState ?? vscode.TreeItemCollapsibleState.None);
@@ -89,9 +114,12 @@ export class ReviewOverviewNode extends vscode.TreeItem {
     this.tooltip = options.tooltip;
     this.iconPath = options.icon ? new vscode.ThemeIcon(options.icon) : undefined;
     this.children = options.children;
+    this.id = options.id;
+    this.commentId = options.commentId;
   }
 
   readonly children?: ReviewOverviewNode[];
+  readonly commentId?: string;
 }
 
 function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
@@ -175,14 +203,16 @@ function buildDraftCommentGroupNode(label: string, comments: Comment[], icon: st
   const children = comments.map((comment) => {
     const location = formatCommentLocation(comment);
     return new ReviewOverviewNode(truncate(comment.body), {
-      description: `${comment.path}:${location}`,
-      tooltip: `${comment.path}:${location}\n\n${comment.body}`,
+      description: `${prettyCommentCategory(comment)} - ${comment.path}:${location}`,
+      tooltip: `${prettyCommentScope(comment)} - ${prettyCommentCategory(comment)}\n${comment.path}:${location}\n\n${comment.body}`,
       command: {
         command: "arp.openOverviewDraftComment",
         title: "Open Draft Comment",
         arguments: [comment],
       },
       icon: iconForCategory(comment.category),
+      id: `draft:${comment.id}`,
+      commentId: comment.id,
     });
   });
 
@@ -231,6 +261,14 @@ function truncate(text: string, max = 48): string {
     return text;
   }
   return `${text.slice(0, max - 1)}…`;
+}
+
+function prettyCommentCategory(comment: Comment): string {
+  return comment.category ?? "note";
+}
+
+function prettyCommentScope(comment: Comment): string {
+  return (comment.scope ?? "review") === "context" ? "Context reference" : "Review comment";
 }
 
 function iconForCategory(category?: Comment["category"]): string {

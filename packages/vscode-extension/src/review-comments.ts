@@ -225,7 +225,7 @@ export class DraftReviewComment implements vscode.Comment {
     this.contextValue = comment.status === "draft" ? COMMENT_CONTEXT_VALUE : "arp-submitted-comment";
     this.body = comment.body;
     this.originalBody = comment.body;
-    this.label = `${comment.scope ?? "review"} - ${comment.status} - ${comment.category ?? "note"}`;
+    this.label = `${prettyCommentScope(comment)} - ${prettyCommentLocation(comment)} - ${comment.category ?? "note"}`;
     this.range = toRange(comment);
   }
 
@@ -300,6 +300,16 @@ function mapThreadState(status?: ResolutionStatus): vscode.CommentThreadState {
   }
 
   return vscode.CommentThreadState.Unresolved;
+}
+
+function prettyCommentScope(comment: Comment): string {
+  return (comment.scope ?? "review") === "context" ? "context" : "review";
+}
+
+function prettyCommentLocation(comment: Comment): string {
+  const startLine = comment.startLine ?? comment.line ?? 1;
+  const endLine = comment.endLine ?? comment.line ?? startLine;
+  return startLine === endLine ? `L${startLine}` : `L${startLine}-${endLine}`;
 }
 
 function prettyResolutionStatus(status: ResolutionStatus): string {

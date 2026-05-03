@@ -41,17 +41,19 @@ export function activate(context: vscode.ExtensionContext): void {
   const reviewStatusBar = new ReviewStatusBar();
   const reviewCommentCodeLensProvider = new ReviewCommentCodeLensProvider();
   const reviewBaseContentProvider = new ReviewBaseContentProvider();
+  const reviewFilesView = vscode.window.createTreeView("arpReviewFiles", { treeDataProvider: reviewFiles });
+  const reviewOverviewView = vscode.window.createTreeView("arpReviewOverview", { treeDataProvider: reviewOverview, showCollapseAll: false });
   context.subscriptions.push(
     outputChannel,
     reviewComments,
     reviewFiles,
     reviewOverview,
     reviewStatusBar,
+    reviewFilesView,
+    reviewOverviewView,
     vscode.languages.registerCodeLensProvider({ scheme: "file" }, reviewCommentCodeLensProvider),
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_BASE_SCHEME, reviewBaseContentProvider),
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_EMPTY_SCHEME, reviewBaseContentProvider),
-    vscode.window.registerTreeDataProvider("arpReviewFiles", reviewFiles),
-    vscode.window.registerTreeDataProvider("arpReviewOverview", reviewOverview),
   );
   void initializeReviewUi(getWorkspaceRoot(), getExtensionConfig().busDbPath || undefined, {
     reviewComments,
@@ -135,7 +137,8 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
       reviewCommentCodeLensProvider.refresh();
-      void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
+      await revealDraftCommentInOverview(reviewOverviewView, reviewOverview, comment);
+      void vscode.window.showInformationMessage(formatAddedCommentMessage(comment));
     }),
   );
 
@@ -345,7 +348,8 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
       reviewCommentCodeLensProvider.refresh();
-      void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
+      await revealDraftCommentInOverview(reviewOverviewView, reviewOverview, comment);
+      void vscode.window.showInformationMessage(formatAddedCommentMessage(comment));
     }),
     vscode.commands.registerCommand("arp.openOverviewDraftComment", async (comment: Comment) => {
       await openCommentInEditor(comment);
@@ -539,6 +543,31 @@ function normalizeCommentRange(uri: vscode.Uri, fallbackRange: vscode.Range): vs
   }
 
   return new vscode.Range(selection.start.line, 0, selection.end.line, 0);
+}
+
+async function revealDraftCommentInOverview(
+  reviewOverviewView: vscode.TreeView<any>,
+  reviewOverview: ReviewOverviewProvider,
+  comment: Comment,
+): Promise<void> {
+  const node = reviewOverview.findDraftCommentNode(comment.id);
+  if (!node) {
+    return;
+  }
+
+  await reviewOverviewView.reveal(node, {
+    select: true,
+    focus: false,
+    expand: 3,
+  });
+}
+
+function formatAddedCommentMessage(comment: Comment): string {
+  const scope = (comment.scope ?? "review") === "context" ? "Context reference" : "Review comment";
+  const startLine = comment.startLine ?? comment.line ?? 1;
+  const endLine = comment.endLine ?? comment.line ?? startLine;
+  const location = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
+  return `${scope} added on ${location}`;
 }
 
 async function openCommentInEditor(comment: Comment): Promise<void> {
