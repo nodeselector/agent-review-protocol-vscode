@@ -9,7 +9,7 @@ import {
   updateDraftComment,
 } from "./review-store.js";
 import { captureGitDiffArtifact, parseCommentingRangesFromPatch } from "./git-diff.js";
-import type { Comment } from "../../protocol/src/index.js";
+import type { AdapterReviewResult, Comment, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
 
 const COMMENT_CONTROLLER_ID = "arp-review";
 const COMMENT_CONTEXT_VALUE = "arp-draft-comment";
@@ -19,6 +19,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
   private readonly controller: vscode.CommentController;
   private readonly threads = new Map<string, vscode.CommentThread>();
   private workspaceRoot?: string;
+  private latestResult?: AdapterReviewResult;
 
   constructor() {
     this.controller = vscode.comments.createCommentController(COMMENT_CONTROLLER_ID, "ARP Review");
@@ -41,17 +42,27 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     }
 
     const store = await loadReviewStore(this.workspaceRoot);
+    const resolutions = new Map(
+      (this.latestResult?.revision.resolutions ?? []).map((resolution) => [resolution.commentId, resolution] as const),
+    );
+
     for (const comment of store.comments) {
+      const resolution = resolutions.get(comment.id);
+      const comments: vscode.Comment[] = [new DraftReviewComment(comment)];
+      if (resolution) {
+        comments.push(new ResultProjectionComment(this.latestResult!, resolution));
+      }
+
       const thread = this.controller.createCommentThread(
         vscode.Uri.file(path.join(this.workspaceRoot, comment.path)),
         toRange(comment),
-        [new DraftReviewComment(comment)],
+        comments,
       );
       thread.contextValue = THREAD_CONTEXT_VALUE;
-      thread.label = `ARP draft - ${comment.category ?? "note"}`;
+      thread.label = buildThreadLabel(comment, resolution);
       thread.canReply = false;
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-      thread.state = vscode.CommentThreadState.Unresolved;
+      thread.state = mapThreadState(resolution?.status);
       this.threads.set(comment.id, thread);
     }
   }
@@ -169,6 +180,11 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     await this.refresh();
   }
 
+  async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
+    this.latestResult = result;
+    await this.refresh();
+  }
+
   dispose(): void {
     this.clearThreads();
     this.controller.dispose();
@@ -216,6 +232,28 @@ export class DraftReviewComment implements vscode.Comment {
   }
 }
 
+export class ResultProjectionComment implements vscode.Comment {
+  readonly author: vscode.CommentAuthorInformation = { name: "ARP result" };
+  readonly contextValue = "arp-result-comment";
+  readonly timestamp = new Date();
+  readonly label: string;
+  readonly mode = vscode.CommentMode.Preview;
+  readonly body: vscode.MarkdownString;
+
+  constructor(result: AdapterReviewResult, resolution: CommentResolution) {
+    this.label = `${result.mode} - ${resolution.status}`;
+    const markdown = new vscode.MarkdownString();
+    markdown.appendMarkdown(`**${prettyResolutionStatus(resolution.status)}**`);
+    if (resolution.note) {
+      markdown.appendMarkdown(`\n\n${escapeMarkdown(resolution.note)}`);
+    }
+    if (result.revision.summary) {
+      markdown.appendMarkdown(`\n\nSummary: ${escapeMarkdown(result.revision.summary)}`);
+    }
+    this.body = markdown;
+  }
+}
+
 function toRange(comment: Pick<Comment, "line" | "startLine" | "endLine">): vscode.Range {
   const startLine = (comment.startLine ?? comment.line ?? 1) - 1;
   const endLine = (comment.endLine ?? comment.line ?? comment.startLine ?? 1) - 1;
@@ -232,4 +270,28 @@ function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | 
 
 function asPlainText(body: string | vscode.MarkdownString): string {
   return typeof body === "string" ? body : body.value;
+}
+
+function buildThreadLabel(comment: Comment, resolution?: CommentResolution): string {
+  if (!resolution) {
+    return `ARP draft - ${comment.category ?? "note"}`;
+  }
+
+  return `ARP draft - ${comment.category ?? "note"} - ${prettyResolutionStatus(resolution.status)}`;
+}
+
+function mapThreadState(status?: ResolutionStatus): vscode.CommentThreadState {
+  if (status === "addressed") {
+    return vscode.CommentThreadState.Resolved;
+  }
+
+  return vscode.CommentThreadState.Unresolved;
+}
+
+function prettyResolutionStatus(status: ResolutionStatus): string {
+  return status.replace(/_/g, " ");
+}
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/([*_`])/g, "\\$1");
 }

@@ -120,6 +120,7 @@ scripts/arp-bus-worker-loop --db /absolute/path/to/workspace/.arp/bus/arp.db --p
 2. Run `ARP: Show Latest Bus Revision`.
 3. Confirm a markdown review result opens.
 4. Confirm it reflects the latest `revision.proposed` event for the current session.
+5. Confirm inline draft comment threads are annotated with the latest resolution status/result note.
 
 ## 3. Live-mode QA
 
