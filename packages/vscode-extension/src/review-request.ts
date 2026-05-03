@@ -50,20 +50,28 @@ export async function pollForReviewRequests(
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       const payload = event.payload as ReviewRequestedEventPayload;
-      if (!respondedRequestIds.has(payload.requestId)) {
-        return {
-          requestId: payload.requestId,
-          sessionId: payload.sessionId,
-          workspaceId: event.workspaceId,
-          workspaceRoot: payload.workspaceRoot,
-          patch: payload.artifact.patch,
-          changedFiles: payload.artifact.changedFiles as Array<{ path: string; status: string }>,
-          summary: payload.summary,
-          iteration: payload.iteration ?? 1,
-          requestedAt: payload.requestedAt,
-          eventSeq: event.seq ?? 0,
-        };
+      if (respondedRequestIds.has(payload.requestId)) {
+        continue;
       }
+
+      // Ignore stale requests older than 10 minutes
+      const requestAge = Date.now() - new Date(payload.requestedAt).getTime();
+      if (requestAge > 10 * 60 * 1000) {
+        continue;
+      }
+
+      return {
+        requestId: payload.requestId,
+        sessionId: payload.sessionId,
+        workspaceId: event.workspaceId,
+        workspaceRoot: payload.workspaceRoot,
+        patch: payload.artifact.patch,
+        changedFiles: payload.artifact.changedFiles as Array<{ path: string; status: string }>,
+        summary: payload.summary,
+        iteration: payload.iteration ?? 1,
+        requestedAt: payload.requestedAt,
+        eventSeq: event.seq ?? 0,
+      };
     }
 
     return null;

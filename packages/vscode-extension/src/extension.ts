@@ -86,6 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Auto-poll for review requests from agents
   let reviewRequestPollTimer: ReturnType<typeof setInterval> | undefined;
+  let dismissedRequestIds = new Set<string>();
   function startReviewRequestPolling() {
     if (reviewRequestPollTimer) {
       return;
@@ -101,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const config = getExtensionConfig();
       const request = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
-      if (!request) {
+      if (!request || dismissedRequestIds.has(request.requestId)) {
         return;
       }
 
@@ -113,6 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
 
       if (action !== "Open Review") {
+        dismissedRequestIds.add(request.requestId);
         return;
       }
 
