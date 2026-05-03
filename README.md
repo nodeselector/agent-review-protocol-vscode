@@ -37,6 +37,8 @@ Local prototype. This repo currently contains:
 - initial ARP bus domain interfaces, invariants, and adapter boundary docs
 - first SQLite-backed ARP bus adapter behind repository contracts
 
+
+
 ## Development
 
 ```bash
