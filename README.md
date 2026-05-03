@@ -54,6 +54,8 @@ pnpm qa:manual
 
 See [`QA.md`](QA.md) for safe, stub-mode, and live-mode validation tiers.
 
+See [`DEMO.md`](DEMO.md) for a short human demo script.
+
 See [`docs/arp-bus-architecture.md`](docs/arp-bus-architecture.md) for the datastore-agnostic bus model.
 
 

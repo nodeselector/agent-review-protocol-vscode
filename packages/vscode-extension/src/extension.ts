@@ -158,73 +158,97 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
-        const busDbPath = config.busDbPath || undefined;
-        if (config.autoStartBusWorkerLoop) {
-          const worker = await ensureBusWorkerLoopRunning({
-            workspaceRoot,
-            dbPath: busDbPath ?? `${workspaceRoot}/.arp/bus/arp.db`,
-            command: config.busWorkerLoopCommand || undefined,
-            pollIntervalMs: config.busWorkerLoopPollIntervalMs,
-            onStdout: (line) => logLine(`busWorkerLoop.stdout ${line}`),
-            onStderr: (line) => logLine(`busWorkerLoop.stderr ${line}`),
-          });
-          logJson("busWorkerLoop", worker);
-        }
-
-        const afterSeq = await getCurrentBusEventSeq(workspaceRoot, busDbPath);
-        const result = await enqueueDraftReviewToBus({
-          workspaceRoot,
-          session,
-          artifact,
-          review: {
-            event: "comment",
-            summary: "Draft review from VS Code",
-            comments: store.comments,
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "ARP review",
+            cancellable: false,
           },
-          dbPath: busDbPath,
-        });
+          async (progress) => {
+            const busDbPath = config.busDbPath || undefined;
+            if (config.autoStartBusWorkerLoop) {
+              progress.report({ message: "starting worker loop" });
+              const worker = await ensureBusWorkerLoopRunning({
+                workspaceRoot,
+                dbPath: busDbPath ?? `${workspaceRoot}/.arp/bus/arp.db`,
+                command: config.busWorkerLoopCommand || undefined,
+                pollIntervalMs: config.busWorkerLoopPollIntervalMs,
+                onStdout: (line) => logLine(`busWorkerLoop.stdout ${line}`),
+                onStderr: (line) => logLine(`busWorkerLoop.stderr ${line}`),
+              });
+              logJson("busWorkerLoop", worker);
+              if (worker.status === "started") {
+                void vscode.window.showInformationMessage(`ARP worker started${worker.pid ? ` (pid ${worker.pid})` : ""}.`);
+              }
+            }
 
-        logJson("submitReviewToBus", result);
+            progress.report({ message: "capturing bus checkpoint" });
+            const afterSeq = await getCurrentBusEventSeq(workspaceRoot, busDbPath);
 
-        const latest = await waitForRevisionFromBus({
-          workspaceRoot,
-          sessionId: session.id,
-          commandId: result.commandId,
-          dbPath: result.dbPath,
-          afterSeq,
-          timeoutMs: config.busWaitTimeoutMs,
-          pollIntervalMs: config.busPollIntervalMs,
-        });
+            progress.report({ message: "queueing review" });
+            const result = await enqueueDraftReviewToBus({
+              workspaceRoot,
+              session,
+              artifact,
+              review: {
+                event: "comment",
+                summary: "Draft review from VS Code",
+                comments: store.comments,
+              },
+              dbPath: busDbPath,
+            });
 
-        if (latest) {
-          logJson("submitReviewToBus.result", latest);
-          await showReviewResult(
-            { result: latest.result },
-            artifact.changedFiles.length,
-            store.comments.length,
-          );
-          return;
-        }
+            logJson("submitReviewToBus", result);
+            logLine(`queued review command ${result.commandId}`);
 
-        const document = await vscode.workspace.openTextDocument({
-          content: [
-            "# ARP Review Enqueued",
-            "",
-            `- Command: ${result.commandId}`,
-            `- Session: ${result.sessionId}`,
-            `- Workspace: ${result.workspaceId}`,
-            `- DB: ${result.dbPath}`,
-            `- Changed files: ${artifact.changedFiles.length}`,
-            `- Comments submitted: ${store.comments.length}`,
-            `- Wait timeout ms: ${config.busWaitTimeoutMs}`,
-            "",
-            "The review was enqueued into the local ARP bus.",
-            "No matching `revision.proposed` arrived before the wait timeout.",
-            "Run `ARP: Show Latest Bus Revision` after the worker finishes.",
-          ].join("\n"),
-          language: "markdown",
-        });
-        await vscode.window.showTextDocument(document, { preview: false });
+            progress.report({ message: "waiting for review result" });
+            const latest = await waitForRevisionFromBus({
+              workspaceRoot,
+              sessionId: session.id,
+              commandId: result.commandId,
+              dbPath: result.dbPath,
+              afterSeq,
+              timeoutMs: config.busWaitTimeoutMs,
+              pollIntervalMs: config.busPollIntervalMs,
+            });
+
+            if (latest) {
+              logJson("submitReviewToBus.result", latest);
+              logLine(`received revision.proposed for ${result.commandId}`);
+              void vscode.window.showInformationMessage("ARP review result received.");
+              await showReviewResult(
+                { result: latest.result },
+                artifact.changedFiles.length,
+                store.comments.length,
+              );
+              return;
+            }
+
+            logLine(`timed out waiting for revision.proposed for ${result.commandId}`);
+            void vscode.window.showWarningMessage(
+              "ARP review queued. No result arrived before the wait timeout.",
+            );
+            const document = await vscode.workspace.openTextDocument({
+              content: [
+                "# ARP Review Enqueued",
+                "",
+                `- Command: ${result.commandId}`,
+                `- Session: ${result.sessionId}`,
+                `- Workspace: ${result.workspaceId}`,
+                `- DB: ${result.dbPath}`,
+                `- Changed files: ${artifact.changedFiles.length}`,
+                `- Comments submitted: ${store.comments.length}`,
+                `- Wait timeout ms: ${config.busWaitTimeoutMs}`,
+                "",
+                "The review was enqueued into the local ARP bus.",
+                "No matching `revision.proposed` arrived before the wait timeout.",
+                "Run `ARP: Show Latest Bus Revision` after the worker finishes.",
+              ].join("\n"),
+              language: "markdown",
+            });
+            await vscode.window.showTextDocument(document, { preview: false });
+          },
+        );
       } catch (error) {
         outputChannel.show(true);
         void vscode.window.showErrorMessage(formatCommandError("submit review to bus", error));

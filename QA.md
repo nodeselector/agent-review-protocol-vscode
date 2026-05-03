@@ -34,6 +34,8 @@ Current automated coverage includes:
 - pi review execution prompt + normalization tests
 - pi review execution fallback-mode smoke coverage when `pi` is unavailable
 
+See also [`DEMO.md`](DEMO.md) for the shortest human review path.
+
 ## 2. Manual stub-mode QA
 
 This is the default manual path.
