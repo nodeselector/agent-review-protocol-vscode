@@ -29,6 +29,7 @@ Local prototype. This repo currently contains:
 - bus-backed review submission path via local SQLite as the primary review flow
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
+- changed-files sidebar for the active review with diff opening against HEAD
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
 - lazy in-editor worker supervisor that can auto-start the local bus worker loop
 - pi-backed review execution with stub, fallback, and live-gated modes
@@ -74,8 +75,9 @@ Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 1. `ARP: Start Session`
 2. `ARP: Add Draft Comment at Cursor`
 3. `ARP: Show Draft Comments`
-4. `ARP: Submit Review`
-5. `ARP: Show Latest Bus Revision`
+4. Use the `ARP Review Files` view to open a changed file diff
+5. `ARP: Submit Review`
+6. `ARP: Show Latest Bus Revision`
 
 You should get a markdown result document plus raw JSON in the ARP output channel.
 

@@ -51,6 +51,14 @@
         "title": "ARP: Show Output"
       },
       {
+        "command": "arp.openReviewFileDiff",
+        "title": "ARP: Open Review File Diff"
+      },
+      {
+        "command": "arp.refreshReviewFiles",
+        "title": "ARP: Refresh Review Files"
+      },
+      {
         "command": "arp.createDraftComment",
         "title": "ARP: Create Draft Comment"
       },
@@ -120,6 +128,14 @@
         }
       }
     },
+    "views": {
+      "explorer": [
+        {
+          "id": "arpReviewFiles",
+          "name": "ARP Review Files"
+        }
+      ]
+    },
     "menus": {
       "comments/commentThread/context": [
         {
@@ -150,6 +166,13 @@
           "command": "arp.cancelEditDraftComment",
           "group": "inline@2",
           "when": "commentController == arp-review && comment == arp-draft-comment"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "arp.refreshReviewFiles",
+          "group": "navigation",
+          "when": "view == arpReviewFiles"
         }
       ]
     }

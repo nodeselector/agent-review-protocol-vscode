@@ -11,6 +11,14 @@ import {
 import { ensureBusWorkerLoopRunning, stopBusWorkerLoop } from "./worker-manager.js";
 import { ReviewCommentsManager, DraftReviewComment } from "./review-comments.js";
 import {
+  createReviewDiffUris,
+  ReviewBaseContentProvider,
+  ReviewFileNode,
+  ReviewFilesProvider,
+  REVIEW_BASE_SCHEME,
+  REVIEW_EMPTY_SCHEME,
+} from "./review-files.js";
+import {
   addDraftComment,
   clearDraftComments,
   ensureSession,
@@ -22,11 +30,22 @@ const outputChannel = vscode.window.createOutputChannel("ARP");
 
 export function activate(context: vscode.ExtensionContext): void {
   const reviewComments = new ReviewCommentsManager();
-  context.subscriptions.push(outputChannel, reviewComments);
+  const reviewFiles = new ReviewFilesProvider();
+  const reviewBaseContentProvider = new ReviewBaseContentProvider();
+  context.subscriptions.push(
+    outputChannel,
+    reviewComments,
+    reviewFiles,
+    vscode.workspace.registerTextDocumentContentProvider(REVIEW_BASE_SCHEME, reviewBaseContentProvider),
+    vscode.workspace.registerTextDocumentContentProvider(REVIEW_EMPTY_SCHEME, reviewBaseContentProvider),
+    vscode.window.registerTreeDataProvider("arpReviewFiles", reviewFiles),
+  );
   void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
+  void reviewFiles.setWorkspaceRoot(getWorkspaceRoot());
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
+      void reviewFiles.setWorkspaceRoot(getWorkspaceRoot());
     }),
   );
   context.subscriptions.push({
@@ -46,6 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const localSession = await ensureSession(workspaceRoot);
         await reviewComments.setWorkspaceRoot(workspaceRoot);
+        await reviewFiles.setWorkspaceRoot(workspaceRoot);
         const config = getExtensionConfig();
         const response = await sendJsonRpc(
           config.referenceServerCommand,
@@ -101,6 +121,7 @@ export function activate(context: vscode.ExtensionContext): void {
       });
 
       await reviewComments.refresh();
+      await reviewFiles.refresh();
       void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
     }),
   );
@@ -133,6 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       await clearDraftComments(workspaceRoot);
       await reviewComments.refresh();
+      await reviewFiles.refresh();
       void vscode.window.showInformationMessage("Cleared ARP draft comments.");
     }),
   );
@@ -301,18 +323,39 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.createDraftComment", async (reply: vscode.CommentReply) => {
       await reviewComments.createOrReply(reply);
+      await reviewFiles.refresh();
     }),
     vscode.commands.registerCommand("arp.editDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.edit(comment);
     }),
     vscode.commands.registerCommand("arp.saveDraftComment", async (comment: DraftReviewComment) => {
       await reviewComments.save(comment);
+      await reviewFiles.refresh();
     }),
     vscode.commands.registerCommand("arp.cancelEditDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.cancel(comment);
     }),
     vscode.commands.registerCommand("arp.deleteDraftComment", async (comment: DraftReviewComment) => {
       await reviewComments.delete(comment);
+      await reviewFiles.refresh();
+    }),
+    vscode.commands.registerCommand("arp.openReviewFileDiff", async (node: ReviewFileNode) => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const { left, right } = createReviewDiffUris(workspaceRoot, node.file);
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        left,
+        right,
+        `${node.file.path} (ARP Review)`,
+      );
+    }),
+    vscode.commands.registerCommand("arp.refreshReviewFiles", async () => {
+      await reviewFiles.refresh();
     }),
   );
 

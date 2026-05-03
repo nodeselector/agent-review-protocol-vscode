@@ -80,6 +80,13 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 7. Run `ARP: Clear Draft Comments`.
 8. Run `ARP: Show Draft Comments` again and confirm it says `No draft comments.`
 
+### Validate review files sidebar
+
+1. Make sure the workspace has a non-empty `git diff`.
+2. Confirm the `ARP Review Files` view shows changed files.
+3. Open one item from the view.
+4. Confirm a diff opens against HEAD for that file.
+
 ### Validate primary bus review submit
 
 1. Add one draft comment again.
