@@ -121,6 +121,20 @@ export function activate(context: vscode.ExtensionContext): void {
         });
         reviewCommentCodeLensProvider.setHasActiveSession(true);
         reviewComments.setHasActiveSession(true);
+
+        // Open first changed file so gutter commenting activates immediately
+        await reviewFiles.refresh();
+        const firstFile = reviewFiles.getFirstPendingFile();
+        if (firstFile) {
+          const { left, right } = createReviewDiffUris(workspaceRoot, firstFile.file);
+          await vscode.commands.executeCommand(
+            "vscode.diff",
+            left,
+            right,
+            `${firstFile.file.path} (ARP Review)`,
+          );
+        }
+
         void vscode.window.showInformationMessage(
           `Agent requested review (iteration ${request.iteration}): ${request.changedFiles.length} changed files. Add comments and submit.`,
         );
