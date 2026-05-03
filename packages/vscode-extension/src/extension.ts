@@ -382,6 +382,27 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("arp.refreshReviewFiles", async () => {
       await reviewFiles.refresh();
     }),
+    vscode.commands.registerCommand("arp.openNextReviewFile", async () => {
+      const node = reviewFiles.getFirstPendingFile();
+      if (!node) {
+        void vscode.window.showWarningMessage("No review files available.");
+        return;
+      }
+
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const { left, right } = createReviewDiffUris(workspaceRoot, node.file);
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        left,
+        right,
+        `${node.file.path} (ARP Review)`,
+      );
+    }),
   );
 
   context.subscriptions.push(

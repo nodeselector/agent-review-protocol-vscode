@@ -41,13 +41,15 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
         (this.latestResult?.revision.resolutions ?? []).map((resolution) => [resolution.commentId, resolution] as const),
       );
 
-      this.files = artifact.changedFiles.map((file) => {
-        const draftComments = store.comments.filter((comment) => comment.path === file.path);
-        const fileResolutions = draftComments
-          .map((comment) => resolutions.get(comment.id))
-          .filter((resolution): resolution is CommentResolution => Boolean(resolution));
-        return new ReviewFileNode(file, summarizeFileReviewState(draftComments.length, fileResolutions));
-      });
+      this.files = artifact.changedFiles
+        .map((file) => {
+          const draftComments = store.comments.filter((comment) => comment.path === file.path);
+          const fileResolutions = draftComments
+            .map((comment) => resolutions.get(comment.id))
+            .filter((resolution): resolution is CommentResolution => Boolean(resolution));
+          return new ReviewFileNode(file, buildFileReviewSummary(draftComments.length, fileResolutions));
+        })
+        .sort(compareReviewFileNodes);
     } catch {
       this.files = [];
     }
@@ -57,6 +59,10 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
 
   getTreeItem(element: ReviewFileNode): vscode.TreeItem {
     return element;
+  }
+
+  getFirstPendingFile(): ReviewFileNode | undefined {
+    return this.files.find((file) => file.pendingCount > 0 || file.commentCount > 0) ?? this.files[0];
   }
 
   getChildren(element?: ReviewFileNode): Thenable<ReviewFileNode[]> {
@@ -72,10 +78,24 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
   }
 }
 
+export interface ReviewFileSummary {
+  text?: string;
+  commentCount: number;
+  addressedCount: number;
+  pendingCount: number;
+}
+
 export class ReviewFileNode extends vscode.TreeItem {
-  constructor(public readonly file: ChangedFile, summary?: string) {
+  readonly commentCount: number;
+  readonly addressedCount: number;
+  readonly pendingCount: number;
+
+  constructor(public readonly file: ChangedFile, summary: ReviewFileSummary) {
     super(file.path, vscode.TreeItemCollapsibleState.None);
-    this.description = summary ? `${file.status} - ${summary}` : file.status;
+    this.commentCount = summary.commentCount;
+    this.addressedCount = summary.addressedCount;
+    this.pendingCount = summary.pendingCount;
+    this.description = summary.text ? `${file.status} - ${summary.text}` : file.status;
     this.contextValue = "arp-review-file";
     this.command = {
       command: "arp.openReviewFileDiff",
@@ -139,9 +159,9 @@ function iconForStatus(status: ChangedFile["status"]): string {
 export const REVIEW_BASE_SCHEME = BASE_SCHEME;
 export const REVIEW_EMPTY_SCHEME = EMPTY_SCHEME;
 
-function summarizeFileReviewState(commentCount: number, resolutions: CommentResolution[]): string | undefined {
+function buildFileReviewSummary(commentCount: number, resolutions: CommentResolution[]): ReviewFileSummary {
   if (commentCount === 0) {
-    return undefined;
+    return { commentCount: 0, addressedCount: 0, pendingCount: 0 };
   }
 
   const counts = new Map<ResolutionStatus, number>();
@@ -149,18 +169,34 @@ function summarizeFileReviewState(commentCount: number, resolutions: CommentReso
     counts.set(resolution.status, (counts.get(resolution.status) ?? 0) + 1);
   }
 
-  const parts = [`${commentCount} comment${commentCount === 1 ? "" : "s"}`];
-  if (counts.get("addressed")) {
-    parts.push(`${counts.get("addressed")} addressed`);
-  }
-
-  const pending =
+  const addressedCount = counts.get("addressed") ?? 0;
+  const pendingCount =
     (counts.get("partially_addressed") ?? 0) +
     (counts.get("not_addressed") ?? 0) +
     (counts.get("needs_clarification") ?? 0);
-  if (pending > 0) {
-    parts.push(`${pending} pending`);
+
+  const parts = [`${commentCount} comment${commentCount === 1 ? "" : "s"}`];
+  if (addressedCount > 0) {
+    parts.push(`${addressedCount} addressed`);
+  }
+  if (pendingCount > 0) {
+    parts.push(`${pendingCount} pending`);
   }
 
-  return parts.join(", ");
+  return {
+    text: parts.join(", "),
+    commentCount,
+    addressedCount,
+    pendingCount,
+  };
+}
+
+function compareReviewFileNodes(a: ReviewFileNode, b: ReviewFileNode): number {
+  if (a.pendingCount !== b.pendingCount) {
+    return b.pendingCount - a.pendingCount;
+  }
+  if (a.commentCount !== b.commentCount) {
+    return b.commentCount - a.commentCount;
+  }
+  return a.file.path.localeCompare(b.file.path);
 }

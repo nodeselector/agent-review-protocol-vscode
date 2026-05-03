@@ -59,6 +59,10 @@
         "title": "ARP: Refresh Review Files"
       },
       {
+        "command": "arp.openNextReviewFile",
+        "title": "ARP: Open Next Review File"
+      },
+      {
         "command": "arp.createDraftComment",
         "title": "ARP: Create Draft Comment"
       },
@@ -180,6 +184,11 @@
         },
         {
           "command": "arp.startSession",
+          "group": "navigation",
+          "when": "view == arpReviewOverview"
+        },
+        {
+          "command": "arp.openNextReviewFile",
           "group": "navigation",
           "when": "view == arpReviewOverview"
         },

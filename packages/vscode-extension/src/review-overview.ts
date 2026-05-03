@@ -105,7 +105,7 @@ function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
     new ReviewOverviewNode(
       "Changed files",
       String(state.changedFileCount),
-      undefined,
+      { command: "arp.openNextReviewFile", title: "Open Next Review File" },
       "files",
     ),
   );
