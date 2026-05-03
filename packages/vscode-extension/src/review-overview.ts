@@ -67,6 +67,10 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
     return Promise.resolve(this.nodes);
   }
 
+  getParent(element: ReviewOverviewNode): ReviewOverviewNode | undefined {
+    return element.parent;
+  }
+
   findDraftCommentNode(commentId: string): ReviewOverviewNode | undefined {
     const stack = [...this.nodes];
     while (stack.length > 0) {
@@ -106,6 +110,7 @@ export class ReviewOverviewNode extends vscode.TreeItem {
       children?: ReviewOverviewNode[];
       id?: string;
       commentId?: string;
+      parent?: ReviewOverviewNode;
     } = {},
   ) {
     super(label, options.collapsibleState ?? vscode.TreeItemCollapsibleState.None);
@@ -116,10 +121,12 @@ export class ReviewOverviewNode extends vscode.TreeItem {
     this.children = options.children;
     this.id = options.id;
     this.commentId = options.commentId;
+    this.parent = options.parent;
   }
 
-  readonly children?: ReviewOverviewNode[];
+  children?: ReviewOverviewNode[];
   readonly commentId?: string;
+  readonly parent?: ReviewOverviewNode;
 }
 
 function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
@@ -180,26 +187,42 @@ function buildDraftCommentsNode(draftComments: Comment[]): ReviewOverviewNode {
     });
   }
 
+  const root = new ReviewOverviewNode("Draft comments", {
+    description: String(draftComments.length),
+    icon: "comment-discussion",
+    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+    children: [],
+  });
+
   const reviewComments = draftComments.filter((comment) => (comment.scope ?? "review") === "review");
   const contextComments = draftComments.filter((comment) => comment.scope === "context");
   const children: ReviewOverviewNode[] = [];
 
   if (reviewComments.length > 0) {
-    children.push(buildDraftCommentGroupNode("Review comments", reviewComments, "comment-discussion"));
+    children.push(buildDraftCommentGroupNode(root, "Review comments", reviewComments, "comment-discussion"));
   }
   if (contextComments.length > 0) {
-    children.push(buildDraftCommentGroupNode("Context references", contextComments, "references"));
+    children.push(buildDraftCommentGroupNode(root, "Context references", contextComments, "references"));
   }
 
-  return new ReviewOverviewNode("Draft comments", {
-    description: String(draftComments.length),
-    icon: "comment-discussion",
-    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
-    children,
-  });
+  root.children = children;
+  return root;
 }
 
-function buildDraftCommentGroupNode(label: string, comments: Comment[], icon: string): ReviewOverviewNode {
+function buildDraftCommentGroupNode(
+  parent: ReviewOverviewNode,
+  label: string,
+  comments: Comment[],
+  icon: string,
+): ReviewOverviewNode {
+  const group = new ReviewOverviewNode(label, {
+    description: String(comments.length),
+    icon,
+    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+    children: [],
+    parent,
+  });
+
   const children = comments.map((comment) => {
     const location = formatCommentLocation(comment);
     return new ReviewOverviewNode(truncate(comment.body), {
@@ -213,15 +236,12 @@ function buildDraftCommentGroupNode(label: string, comments: Comment[], icon: st
       icon: iconForCategory(comment.category),
       id: `draft:${comment.id}`,
       commentId: comment.id,
+      parent: group,
     });
   });
 
-  return new ReviewOverviewNode(label, {
-    description: String(comments.length),
-    icon,
-    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
-    children,
-  });
+  group.children = children;
+  return group;
 }
 
 function sortDraftComments(comments: Comment[]): Comment[] {
