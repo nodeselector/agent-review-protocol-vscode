@@ -25,6 +25,7 @@ import {
   bindReviewSession,
   clearAllComments,
   clearDraftComments,
+  clearReviewSession,
   ensureSession,
   formatDraftComments,
   getActiveDraftComments,
@@ -284,6 +285,7 @@ export function activate(context: vscode.ExtensionContext): void {
           );
 
           activeReviewRequest = null;
+          await clearReviewSession(workspaceRoot);
           reviewCommentCodeLensProvider.setHasActiveSession(false);
           reviewComments.setHasActiveSession(false);
           await reviewComments.refresh();
@@ -323,6 +325,7 @@ export function activate(context: vscode.ExtensionContext): void {
           );
 
           activeReviewRequest = null;
+          await clearReviewSession(workspaceRoot);
           reviewCommentCodeLensProvider.setHasActiveSession(false);
           reviewComments.setHasActiveSession(false);
           await reviewComments.refresh();
@@ -567,6 +570,7 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         activeReviewRequest = null;
+        await clearReviewSession(workspaceRoot);
         reviewCommentCodeLensProvider.setHasActiveSession(false);
         reviewComments.setHasActiveSession(false);
         await reviewComments.refresh();

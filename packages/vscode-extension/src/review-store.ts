@@ -179,6 +179,15 @@ export async function clearAllComments(workspaceRoot: string): Promise<void> {
   });
 }
 
+export async function clearReviewSession(workspaceRoot: string): Promise<void> {
+  const store = await loadReviewStore(workspaceRoot);
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    reviewSessionId: undefined,
+    reviewIteration: undefined,
+  });
+}
+
 export function formatDraftComments(comments: Comment[]): string {
   if (comments.length === 0) {
     return "No draft comments.";
