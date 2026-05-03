@@ -93,41 +93,20 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       return undefined;
     }
 
+    if (document.uri.scheme !== "file") {
+      return undefined;
+    }
+
     const relativePath = getRelativePathForUri(this.workspaceRoot, document.uri);
     if (!relativePath) {
       return undefined;
     }
 
-    if (isArpReviewDiffDocument(document.uri)) {
-      const artifact = await captureGitDiffArtifact(this.workspaceRoot);
-      const ranges = parseCommentingRangesFromPatch(artifact.patch, relativePath).map(
-        (range) => new vscode.Range(range.startLine - 1, 0, range.endLine - 1, 0),
-      );
-      return {
-        enableFileComments: ranges.length > 0,
-        ranges,
-      };
-    }
-
-    if (document.uri.scheme === "file" && this.changedFiles.has(relativePath)) {
-      const artifact = await captureGitDiffArtifact(this.workspaceRoot);
-      const ranges = parseCommentingRangesFromPatch(artifact.patch, relativePath).map(
-        (range) => new vscode.Range(range.startLine - 1, 0, range.endLine - 1, 0),
-      );
-      if (ranges.length > 0) {
-        return { enableFileComments: true, ranges };
-      }
-    }
-
-    if (document.uri.scheme === "file") {
-      const lastLine = Math.max(document.lineCount - 1, 0);
-      return {
-        enableFileComments: false,
-        ranges: [new vscode.Range(0, 0, lastLine, 0)],
-      };
-    }
-
-    return undefined;
+    const lastLine = Math.max(document.lineCount - 1, 0);
+    return {
+      enableFileComments: false,
+      ranges: [new vscode.Range(0, 0, lastLine, 0)],
+    };
   }
 
   async createOrReply(reply: vscode.CommentReply): Promise<Comment | undefined> {
