@@ -25,9 +25,15 @@ importers:
 
   packages/pi-adapter:
     dependencies:
+      '@arp/domain':
+        specifier: workspace:*
+        version: link:../arp-domain
       '@arp/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@arp/store-sqlite':
+        specifier: workspace:*
+        version: link:../arp-store-sqlite
 
   packages/protocol: {}
 

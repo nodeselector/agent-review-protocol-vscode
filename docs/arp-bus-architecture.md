@@ -96,8 +96,14 @@ It currently implements:
 - checkpoint advancement
 - bus-level atomic complete/fail with emitted events
 
-It is intentionally not wired into the VS Code or pi worker flow yet.
+The VS Code side can now enqueue `review.submit` commands, and a tiny local worker can claim one command and emit `revision.proposed`.
+
+What is still missing:
+
+- event consumption back into the editor UI
+- long-running worker loop / daemon behavior
+- subscription-driven projection or read model for review state
 
 ## Next implementation step
 
-Switch the current extension and worker paths from ad hoc local state to the bus service boundary.
+Teach the VS Code extension to read `revision.proposed` events from the bus and render results without the direct RPC path.

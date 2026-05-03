@@ -8,7 +8,7 @@ import {
   type JsonRpcSuccess,
   type ReviewSubmitParams,
 } from "../../protocol/src/index.js";
-import { buildPrompt, createStubRevision, invokePiForReview, normalizeAssistantTextToRevision } from "./pi-client.js";
+import { submitReview } from "./review-submit.js";
 
 const capabilities: Capabilities = {
   supports: {
@@ -56,48 +56,7 @@ async function handle(request: JsonRpcRequest): Promise<void> {
       return;
     case "review/submit": {
       const params = request.params as ReviewSubmitParams;
-
-      if (process.env.ARP_PI_ADAPTER_DISABLE_LIVE === "1") {
-        writeMessage(
-          success(request.id, {
-            adapter: "pi",
-            mode: "stub",
-            prompt: buildPrompt(params),
-            normalized: true,
-            revision: createStubRevision(params),
-            note: "Live pi invocation disabled by ARP_PI_ADAPTER_DISABLE_LIVE=1.",
-          }),
-        );
-        return;
-      }
-
-      try {
-        const result = await invokePiForReview(params, process.cwd());
-        writeMessage(
-          success(request.id, {
-            adapter: "pi",
-            mode: "live",
-            prompt: result.prompt,
-            normalized: result.normalized,
-            rawOutput: result.rawOutput,
-            revision: result.revision,
-          }),
-        );
-      } catch (invokeError) {
-        writeMessage(
-          success(request.id, {
-            adapter: "pi",
-            mode: "fallback",
-            prompt: buildPrompt(params),
-            normalized: false,
-            revision: normalizeAssistantTextToRevision(
-              invokeError instanceof Error ? invokeError.message : String(invokeError),
-              params,
-            ).revision,
-            note: "Live pi invocation failed. Returned fallback revision payload.",
-          }),
-        );
-      }
+      writeMessage(success(request.id, await submitReview(params)));
       return;
     }
     default:

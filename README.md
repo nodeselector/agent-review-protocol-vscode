@@ -5,7 +5,7 @@ VS Code extension and reference implementation for the Agent Review Protocol.
 ## Packages
 
 - `packages/vscode-extension` - VS Code client for local diff review workflows
-- `packages/pi-adapter` - pi-specific adapter for ARP
+- `packages/pi-adapter` - pi-specific adapter for ARP, plus a tiny local SQLite bus worker
 - `packages/reference-server` - reference JSON-RPC server for ARP over stdio
 - `packages/protocol` - shared protocol types and message helpers
 - `packages/arp-domain` - datastore-agnostic ARP bus domain contracts
@@ -27,6 +27,7 @@ Local prototype. This repo currently contains:
 - reference server
 - VS Code command-driven review scaffold
 - optional bus-backed review submission path via local SQLite
+- local worker path that consumes `review.submit` and emits `revision.proposed`
 - pi adapter with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
@@ -78,6 +79,7 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 - `arp.referenceServerTimeoutMs`
 - `arp.adapterTimeoutMs`
 - `arp.busDbPath` - optional override for the local SQLite bus database
+- `scripts/arp-bus-worker --db /absolute/path/to/.arp/bus/arp.db` - process one queued review command
 
 ## Workspace layout
 

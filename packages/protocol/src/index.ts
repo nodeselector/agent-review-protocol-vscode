@@ -125,6 +125,20 @@ export interface ReviewSubmitCommandPayload {
   workspaceRoot: string;
 }
 
+export interface AdapterReviewResult {
+  adapter: string;
+  mode: "stub" | "live" | "fallback";
+  normalized: boolean;
+  revision: Revision;
+  note?: string;
+  prompt?: string;
+  rawOutput?: string;
+}
+
+export interface RevisionProposedEventPayload extends AdapterReviewResult {
+  commandId: string;
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

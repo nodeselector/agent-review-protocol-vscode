@@ -26,6 +26,7 @@ Current automated coverage includes:
 - git diff artifact tests
 - review store tests
 - bus enqueue tests for `review.submit`
+- local worker tests for `review.submit` -> `revision.proposed`
 - pi adapter prompt + normalization tests
 - pi adapter stub-mode smoke test
 - pi adapter fallback-mode smoke test when `pi` is unavailable
@@ -97,6 +98,18 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
    - workspace ID
    - DB path
 5. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
+
+### Validate one-shot local worker
+
+1. Enqueue a review with `ARP: Submit Review to Bus`.
+2. Run:
+
+```bash
+scripts/arp-bus-worker --db /absolute/path/to/workspace/.arp/bus/arp.db
+```
+
+3. Confirm the command reports `kind: "processed"`.
+4. Confirm a `revision.proposed` event exists in the SQLite bus.
 
 ## 3. Live-mode QA
 
