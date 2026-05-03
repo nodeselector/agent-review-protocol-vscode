@@ -31,9 +31,8 @@ Current automated coverage includes:
 - worker supervisor tests for lazy process start and reuse inside the extension host
 - VS Code bus read tests for latest session revision lookup
 - checkpointed wait tests for auto-opening bus results when they arrive in time
-- pi adapter prompt + normalization tests
-- pi adapter stub-mode smoke test
-- pi adapter fallback-mode smoke test when `pi` is unavailable
+- pi review execution prompt + normalization tests
+- pi review execution fallback-mode smoke coverage when `pi` is unavailable
 
 ## 2. Manual stub-mode QA
 
