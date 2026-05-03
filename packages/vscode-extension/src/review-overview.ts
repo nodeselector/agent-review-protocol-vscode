@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { captureGitDiffArtifact } from "./git-diff.js";
 import { getActiveDraftComments, getCommentsFromPreviousIterations, loadReviewStore, type ReviewStore } from "./review-store.js";
+import { pollForReviewRequests, type ReviewRequest } from "./review-request.js";
 import type { AdapterReviewResult, Comment, ResolutionStatus, Session } from "../../protocol/src/index.js";
 
 export interface ReviewOverviewState {
@@ -11,6 +12,7 @@ export interface ReviewOverviewState {
   previousComments: Comment[];
   changedFileCount: number;
   latestResult?: AdapterReviewResult;
+  pendingRequest?: ReviewRequest | null;
 }
 
 export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOverviewNode>, vscode.Disposable {
@@ -46,6 +48,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
 
     const store = await loadSafeReviewStore(this.workspaceRoot);
     const changedFileCount = await loadChangedFileCount(this.workspaceRoot);
+    const pendingRequest = await loadPendingRequest(this.workspaceRoot);
     this.state = {
       ...this.state,
       session: store.session,
@@ -54,6 +57,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
       draftComments: sortDraftComments(getActiveDraftComments(store)),
       previousComments: getCommentsFromPreviousIterations(store),
       changedFileCount,
+      pendingRequest,
     };
     this.rebuildNodes();
   }
@@ -144,6 +148,14 @@ function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
       new ReviewOverviewNode("Review session", {
         description: `iteration ${state.reviewIteration ?? 1}`,
         icon: "git-pull-request",
+      }),
+    );
+  } else if (state.pendingRequest) {
+    nodes.push(
+      new ReviewOverviewNode("Pending review request", {
+        description: `${state.pendingRequest.changedFiles.length} files - ${state.pendingRequest.summary ?? "waiting for review"}`,
+        command: { command: "arp.checkForReviewRequest", title: "Open Review" },
+        icon: "bell",
       }),
     );
   } else {
@@ -389,5 +401,13 @@ async function loadChangedFileCount(workspaceRoot: string): Promise<number> {
     return artifact.changedFiles.length;
   } catch {
     return 0;
+  }
+}
+
+async function loadPendingRequest(workspaceRoot: string): Promise<ReviewRequest | null> {
+  try {
+    return await pollForReviewRequests(workspaceRoot);
+  } catch {
+    return null;
   }
 }
