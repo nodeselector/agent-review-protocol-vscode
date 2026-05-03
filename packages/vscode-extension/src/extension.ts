@@ -127,67 +127,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("arp.submitStubReview", async () => {
-      const workspaceRoot = getWorkspaceRoot();
-      if (!workspaceRoot) {
-        void vscode.window.showErrorMessage("Open a workspace first.");
-        return;
-      }
-
-      const config = getExtensionConfig();
-      const session = await ensureSession(workspaceRoot);
-      const store = await loadReviewStore(workspaceRoot);
-      if (store.comments.length === 0) {
-        void vscode.window.showWarningMessage("No draft comments to submit.");
-        return;
-      }
-
-      let artifact;
-      try {
-        artifact = await captureGitDiffArtifact(workspaceRoot);
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Failed to capture git diff: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return;
-      }
-
-      if (!artifact.patch.trim() || artifact.changedFiles.length === 0) {
-        void vscode.window.showWarningMessage("Current git diff is empty. Make a change before submitting review.");
-        return;
-      }
-
-      try {
-        const response = await sendJsonRpc(
-          config.adapterCommand,
-          {
-            jsonrpc: "2.0",
-            id: 2,
-            method: "review/submit",
-            params: {
-              sessionId: session.id,
-              review: {
-                event: "comment",
-                summary: "Draft review from VS Code",
-                comments: store.comments,
-              },
-              artifact,
-            },
-          },
-          { timeoutMs: config.adapterTimeoutMs },
-        );
-
-        logJson("submitReview", response);
-        await showReviewResult(response, artifact.changedFiles.length, store.comments.length);
-      } catch (error) {
-        outputChannel.show(true);
-        void vscode.window.showErrorMessage(formatCommandError("submit review", error));
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("arp.submitReviewToBus", async () => {
+    vscode.commands.registerCommand("arp.submitReview", async () => {
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) {
         void vscode.window.showErrorMessage("Open a workspace first.");
@@ -336,9 +276,7 @@ function getWorkspaceRoot(): string | undefined {
 
 function getExtensionConfig(): {
   referenceServerCommand: string;
-  adapterCommand: string;
   referenceServerTimeoutMs: number;
-  adapterTimeoutMs: number;
   busDbPath: string;
   busWaitTimeoutMs: number;
   busPollIntervalMs: number;
@@ -350,9 +288,7 @@ function getExtensionConfig(): {
 
   return {
     referenceServerCommand: config.get<string>("referenceServerCommand", "arp-reference-server"),
-    adapterCommand: config.get<string>("adapterCommand", "arp-pi-adapter"),
     referenceServerTimeoutMs: config.get<number>("referenceServerTimeoutMs", 10000),
-    adapterTimeoutMs: config.get<number>("adapterTimeoutMs", 60000),
     busDbPath: config.get<string>("busDbPath", ""),
     busWaitTimeoutMs: config.get<number>("busWaitTimeoutMs", 15000),
     busPollIntervalMs: config.get<number>("busPollIntervalMs", 500),

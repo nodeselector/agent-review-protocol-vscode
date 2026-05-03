@@ -46,13 +46,12 @@ This is the default manual path.
 - build local wrappers:
 
 ```bash
-chmod +x scripts/arp-reference-server scripts/arp-pi-adapter
+chmod +x scripts/arp-reference-server scripts/arp-bus-worker-loop
 ```
 
 - configure VS Code settings to point at:
   - `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-reference-server`
-  - `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-pi-adapter`
-- export safe adapter mode:
+- export safe adapter mode for worker execution:
 
 ```bash
 export ARP_PI_ADAPTER_DISABLE_LIVE=1
@@ -80,22 +79,11 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 7. Run `ARP: Clear Draft Comments`.
 8. Run `ARP: Show Draft Comments` again and confirm it says `No draft comments.`
 
-### Validate stub review submit
+### Validate primary bus review submit
 
 1. Add one draft comment again.
 2. Ensure the repo has a non-empty `git diff`.
-3. Run `ARP: Submit Stub Review`.
-4. Confirm the opened JSON result contains:
-   - `adapter: "pi"`
-   - `mode: "stub"`
-   - `revision`
-   - the current diff in the prompt body
-
-### Validate bus review submit
-
-1. Add one draft comment again.
-2. Ensure the repo has a non-empty `git diff`.
-3. Run `ARP: Submit Review to Bus`.
+3. Run `ARP: Submit Review`.
 4. Confirm the extension auto-starts or reuses a local worker loop when `arp.autoStartBusWorkerLoop` is enabled.
 5. If the worker processes quickly enough, confirm a markdown review result opens automatically.
 6. Otherwise confirm the enqueue document contains:
@@ -106,18 +94,6 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
    - wait timeout
 7. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
 
-### Validate one-shot local worker
-
-1. Enqueue a review with `ARP: Submit Review to Bus`.
-2. Run:
-
-```bash
-scripts/arp-bus-worker --db /absolute/path/to/workspace/.arp/bus/arp.db
-```
-
-3. Confirm the command reports `kind: "processed"`.
-4. Confirm a `revision.proposed` event exists in the SQLite bus.
-
 ### Validate persistent local worker loop
 
 1. Start the loop in another terminal:
@@ -126,7 +102,7 @@ scripts/arp-bus-worker --db /absolute/path/to/workspace/.arp/bus/arp.db
 scripts/arp-bus-worker-loop --db /absolute/path/to/workspace/.arp/bus/arp.db --poll-ms 250
 ```
 
-2. In the Extension Development Host, run `ARP: Submit Review to Bus`.
+2. In the Extension Development Host, run `ARP: Submit Review`.
 3. Confirm the review result opens automatically if it arrives before the wait timeout.
 4. Stop the loop with `Ctrl-C` and confirm it exits cleanly.
 
@@ -164,24 +140,16 @@ unset ARP_PI_ADAPTER_DISABLE_LIVE
 
 ### Recommended order
 
-1. Validate live adapter from CLI first.
-2. Only after that, validate from the Extension Development Host.
-
-### CLI live check
-
-Use a small diff payload and confirm the adapter returns either:
-
-- `mode: "live"` with `normalized: true|false`, or
-- `mode: "fallback"` with a clear failure note
-
-A fallback result is acceptable for QA at this stage. A hang is not.
+1. Start the persistent worker loop manually if you want to isolate worker behavior.
+2. Otherwise rely on the extension to auto-start it.
+3. Then validate from the Extension Development Host.
 
 ### Extension live check
 
 1. Open the Extension Development Host.
 2. Add one draft comment.
-3. Run `ARP: Submit Stub Review`.
-4. Confirm it returns JSON and the editor remains responsive.
+3. Run `ARP: Submit Review`.
+4. Confirm it returns either an automatic review result or a bounded enqueue result and the editor remains responsive.
 
 ## Failure modes to watch
 

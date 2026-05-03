@@ -14,8 +14,7 @@
     "onCommand:arp.addDraftComment",
     "onCommand:arp.showDraftComments",
     "onCommand:arp.clearDraftComments",
-    "onCommand:arp.submitStubReview",
-    "onCommand:arp.submitReviewToBus",
+    "onCommand:arp.submitReview",
     "onCommand:arp.showLatestBusRevision",
     "onCommand:arp.showOutput"
   ],
@@ -39,12 +38,8 @@
         "title": "ARP: Clear Draft Comments"
       },
       {
-        "command": "arp.submitStubReview",
-        "title": "ARP: Submit Stub Review"
-      },
-      {
-        "command": "arp.submitReviewToBus",
-        "title": "ARP: Submit Review to Bus"
+        "command": "arp.submitReview",
+        "title": "ARP: Submit Review"
       },
       {
         "command": "arp.showLatestBusRevision",
@@ -63,22 +58,11 @@
           "default": "arp-reference-server",
           "description": "Command used to start the ARP reference server."
         },
-        "arp.adapterCommand": {
-          "type": "string",
-          "default": "arp-pi-adapter",
-          "description": "Command used to start the ARP adapter for review submission."
-        },
         "arp.referenceServerTimeoutMs": {
           "type": "number",
           "default": 10000,
           "minimum": 1000,
           "description": "Timeout in milliseconds for reference server RPC calls."
-        },
-        "arp.adapterTimeoutMs": {
-          "type": "number",
-          "default": 60000,
-          "minimum": 1000,
-          "description": "Timeout in milliseconds for adapter RPC calls."
         },
         "arp.busDbPath": {
           "type": "string",

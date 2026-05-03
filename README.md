@@ -26,7 +26,7 @@ Local prototype. This repo currently contains:
 - initial protocol types
 - reference server
 - VS Code command-driven review scaffold
-- optional bus-backed review submission path via local SQLite
+- bus-backed review submission path via local SQLite as the primary review flow
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
@@ -70,25 +70,21 @@ Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 1. `ARP: Start Session`
 2. `ARP: Add Draft Comment at Cursor`
 3. `ARP: Show Draft Comments`
-4. `ARP: Submit Stub Review`
-5. `ARP: Submit Review to Bus`
-6. `ARP: Show Latest Bus Revision`
+4. `ARP: Submit Review`
+5. `ARP: Show Latest Bus Revision`
 
 You should get a markdown result document plus raw JSON in the ARP output channel.
 
 If your binaries are not on `PATH`, use the local wrapper scripts from this repo in VS Code settings:
 
 - `arp.referenceServerCommand` -> `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-reference-server`
-- `arp.adapterCommand` -> `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-pi-adapter`
 - `arp.referenceServerTimeoutMs`
-- `arp.adapterTimeoutMs`
 - `arp.busDbPath` - optional override for the local SQLite bus database
 - `arp.busWaitTimeoutMs` - how long bus submit waits for a matching result before falling back to enqueue-only confirmation
 - `arp.busPollIntervalMs` - poll interval while waiting for a bus result
 - `arp.autoStartBusWorkerLoop` - lazily start or reuse a local worker loop on bus submit
 - `arp.busWorkerLoopCommand` - optional explicit command for the persistent worker loop
 - `arp.busWorkerLoopPollIntervalMs` - polling interval used by the persistent worker loop
-- `scripts/arp-bus-worker --db /absolute/path/to/.arp/bus/arp.db` - process one queued review command
 - `scripts/arp-bus-worker-loop --db /absolute/path/to/.arp/bus/arp.db` - keep polling and process queued review commands until stopped
 
 ## Workspace layout
