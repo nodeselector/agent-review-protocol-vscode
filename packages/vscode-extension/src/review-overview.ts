@@ -173,10 +173,10 @@ function buildDraftCommentsNode(draftComments: Comment[]): ReviewOverviewNode {
 
 function buildDraftCommentGroupNode(label: string, comments: Comment[], icon: string): ReviewOverviewNode {
   const children = comments.map((comment) => {
-    const line = comment.line ?? comment.startLine ?? 1;
+    const location = formatCommentLocation(comment);
     return new ReviewOverviewNode(truncate(comment.body), {
-      description: `${comment.path}:${line}`,
-      tooltip: `${comment.path}:${line}\n\n${comment.body}`,
+      description: `${comment.path}:${location}`,
+      tooltip: `${comment.path}:${location}\n\n${comment.body}`,
       command: {
         command: "arp.openOverviewDraftComment",
         title: "Open Draft Comment",
@@ -218,6 +218,12 @@ function summarizeLatestResult(result: AdapterReviewResult): string {
     parts.push(`${count} ${status.replace(/_/g, " ")}`);
   }
   return parts.join(", ");
+}
+
+function formatCommentLocation(comment: Comment): string {
+  const startLine = comment.startLine ?? comment.line ?? 1;
+  const endLine = comment.endLine ?? comment.line ?? startLine;
+  return startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
 }
 
 function truncate(text: string, max = 48): string {

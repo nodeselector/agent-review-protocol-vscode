@@ -140,7 +140,9 @@ export function formatDraftComments(comments: Comment[]): string {
 
   return comments
     .map((comment, index) => {
-      const line = comment.line ?? `${comment.startLine}-${comment.endLine}`;
+      const startLine = comment.startLine ?? comment.line ?? 1;
+      const endLine = comment.endLine ?? comment.line ?? startLine;
+      const line = startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
       return `${index + 1}. ${comment.path}:${line} [${comment.scope ?? "review"}/${comment.category ?? "note"}] ${comment.body}`;
     })
     .join("\n");

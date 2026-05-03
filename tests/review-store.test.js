@@ -144,6 +144,24 @@ test("formatDraftComments renders readable output", () => {
   assert.match(rendered, /1\. src\/fs.ts:84 \[review\/blocking\] Preserve root slash semantics\./);
 });
 
+test("formatDraftComments renders multi-line ranges", () => {
+  const rendered = formatDraftComments([
+    {
+      id: "c_2",
+      path: "src/fs.ts",
+      side: "new",
+      startLine: 12,
+      endLine: 18,
+      body: "This whole block already exists elsewhere.",
+      category: "note",
+      scope: "context",
+      status: "draft",
+    },
+  ]);
+
+  assert.match(rendered, /1\. src\/fs.ts:12-18 \[context\/note\] This whole block already exists elsewhere\./);
+});
+
 test("getStorePath uses .arp reviews directory", () => {
   assert.equal(getStorePath("/tmp/repo"), "/tmp/repo/.arp/reviews/draft-review.json");
 });

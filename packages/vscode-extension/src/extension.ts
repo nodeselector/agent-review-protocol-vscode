@@ -513,16 +513,32 @@ async function promptAndCreateDraftComment(
     (patchRange) => range.start.line + 1 >= patchRange.startLine && range.start.line + 1 <= patchRange.endLine,
   );
 
+  const selectedRange = normalizeCommentRange(uri, range);
+
   return await addDraftComment(workspaceRoot, {
     path: relativePath,
     side: "new",
-    line: range.start.line + 1,
-    startLine: range.start.line + 1,
-    endLine: range.end.line + 1,
+    line: selectedRange.start.line + 1,
+    startLine: selectedRange.start.line + 1,
+    endLine: selectedRange.end.line + 1,
     body,
     category,
     scope: isReviewRange ? "review" : "context",
   });
+}
+
+function normalizeCommentRange(uri: vscode.Uri, fallbackRange: vscode.Range): vscode.Range {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.uri.toString() !== uri.toString()) {
+    return fallbackRange;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    return fallbackRange;
+  }
+
+  return new vscode.Range(selection.start.line, 0, selection.end.line, 0);
 }
 
 async function openCommentInEditor(comment: Comment): Promise<void> {
@@ -533,8 +549,9 @@ async function openCommentInEditor(comment: Comment): Promise<void> {
   }
 
   const uri = vscode.Uri.file(`${workspaceRoot}/${comment.path}`);
-  const line = (comment.line ?? comment.startLine ?? 1) - 1;
-  const selection = new vscode.Range(line, 0, line, 0);
+  const startLine = (comment.startLine ?? comment.line ?? 1) - 1;
+  const endLine = (comment.endLine ?? comment.line ?? comment.startLine ?? 1) - 1;
+  const selection = new vscode.Range(startLine, 0, endLine, 0);
   const document = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(document, {
     preview: false,
