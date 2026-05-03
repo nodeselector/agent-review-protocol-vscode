@@ -29,7 +29,7 @@ Local prototype. This repo currently contains:
 - bus-backed review submission path via local SQLite as the primary review flow
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
-- changed-files sidebar for the active review with diff opening against HEAD
+- changed-files sidebar for the active review with diff opening against HEAD, draft counts, and result status summaries
 - latest revision results projected back onto inline draft comment threads
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
 - lazy in-editor worker supervisor that can auto-start the local bus worker loop

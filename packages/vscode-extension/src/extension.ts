@@ -249,6 +249,7 @@ export function activate(context: vscode.ExtensionContext): void {
               logJson("submitReviewToBus.result", latest);
               logLine(`received revision.proposed for ${result.commandId}`);
               await reviewComments.applyRevisionResult(latest.result);
+              await reviewFiles.applyRevisionResult(latest.result);
               void vscode.window.showInformationMessage("ARP review result received.");
               await showReviewResult(
                 { result: latest.result },
@@ -310,6 +311,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         logJson("showLatestBusRevision", latest);
         await reviewComments.applyRevisionResult(latest.result);
+        await reviewFiles.applyRevisionResult(latest.result);
         await showReviewResult(
           { result: latest.result },
           "unknown",

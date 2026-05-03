@@ -86,6 +86,7 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 2. Confirm the `ARP Review Files` view shows changed files.
 3. Open one item from the view.
 4. Confirm a diff opens against HEAD for that file.
+5. After review results arrive, confirm the view description reflects file-level comment/result status.
 
 ### Validate primary bus review submit
 

@@ -3,7 +3,8 @@ import { promisify } from "node:util";
 import path from "node:path";
 import * as vscode from "vscode";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import type { ChangedFile } from "../../protocol/src/index.js";
+import { loadReviewStore } from "./review-store.js";
+import type { AdapterReviewResult, ChangedFile, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
 
 const execFileAsync = promisify(execFile);
 const BASE_SCHEME = "arp-base";
@@ -14,6 +15,7 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
   private workspaceRoot?: string;
   private files: ReviewFileNode[] = [];
+  private latestResult?: AdapterReviewResult;
 
   async setWorkspaceRoot(workspaceRoot: string | undefined): Promise<void> {
     this.workspaceRoot = workspaceRoot;
@@ -29,7 +31,18 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
 
     try {
       const artifact = await captureGitDiffArtifact(this.workspaceRoot);
-      this.files = artifact.changedFiles.map((file) => new ReviewFileNode(file));
+      const store = await loadReviewStore(this.workspaceRoot);
+      const resolutions = new Map(
+        (this.latestResult?.revision.resolutions ?? []).map((resolution) => [resolution.commentId, resolution] as const),
+      );
+
+      this.files = artifact.changedFiles.map((file) => {
+        const draftComments = store.comments.filter((comment) => comment.path === file.path);
+        const fileResolutions = draftComments
+          .map((comment) => resolutions.get(comment.id))
+          .filter((resolution): resolution is CommentResolution => Boolean(resolution));
+        return new ReviewFileNode(file, summarizeFileReviewState(draftComments.length, fileResolutions));
+      });
     } catch {
       this.files = [];
     }
@@ -45,15 +58,20 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
     return Promise.resolve(element ? [] : this.files);
   }
 
+  async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
+    this.latestResult = result;
+    await this.refresh();
+  }
+
   dispose(): void {
     this.onDidChangeTreeDataEmitter.dispose();
   }
 }
 
 export class ReviewFileNode extends vscode.TreeItem {
-  constructor(public readonly file: ChangedFile) {
+  constructor(public readonly file: ChangedFile, summary?: string) {
     super(file.path, vscode.TreeItemCollapsibleState.None);
-    this.description = file.status;
+    this.description = summary ? `${file.status} - ${summary}` : file.status;
     this.contextValue = "arp-review-file";
     this.command = {
       command: "arp.openReviewFileDiff",
@@ -116,3 +134,29 @@ function iconForStatus(status: ChangedFile["status"]): string {
 
 export const REVIEW_BASE_SCHEME = BASE_SCHEME;
 export const REVIEW_EMPTY_SCHEME = EMPTY_SCHEME;
+
+function summarizeFileReviewState(commentCount: number, resolutions: CommentResolution[]): string | undefined {
+  if (commentCount === 0) {
+    return undefined;
+  }
+
+  const counts = new Map<ResolutionStatus, number>();
+  for (const resolution of resolutions) {
+    counts.set(resolution.status, (counts.get(resolution.status) ?? 0) + 1);
+  }
+
+  const parts = [`${commentCount} comment${commentCount === 1 ? "" : "s"}`];
+  if (counts.get("addressed")) {
+    parts.push(`${counts.get("addressed")} addressed`);
+  }
+
+  const pending =
+    (counts.get("partially_addressed") ?? 0) +
+    (counts.get("not_addressed") ?? 0) +
+    (counts.get("needs_clarification") ?? 0);
+  if (pending > 0) {
+    parts.push(`${pending} pending`);
+  }
+
+  return parts.join(", ");
+}
