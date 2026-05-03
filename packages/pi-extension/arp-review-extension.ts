@@ -20,6 +20,9 @@ import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {
   let busDbPath: string | undefined;
+  let reviewIteration = 0;
+  let sessionId: string | undefined;
+  let priorFeedback: Array<{ iteration: number; comments: any[]; summary?: string }> = [];
 
   // -- Bus helpers (inline, schema matches SqliteArpStore exactly) --
 
@@ -120,11 +123,13 @@ export default function (pi: ExtensionAPI) {
   function writeReviewRequestedEvent(
     dbPath: string,
     workspaceId: string,
-    sessionId: string,
+    sid: string,
     requestId: string,
     workspaceRoot: string,
     patch: string,
     changedFiles: Array<{ path: string; status: string }>,
+    iteration: number,
+    prior: Array<{ iteration: number; comments: any[]; summary?: string }>,
     summary?: string,
   ) {
     const db = openDb(dbPath);
@@ -139,16 +144,18 @@ export default function (pi: ExtensionAPI) {
       ).run(
         eventId,
         workspaceId,
-        sessionId,
+        sid,
         now,
         requestId,
-        sessionId,
+        sid,
         JSON.stringify({
           requestId,
-          sessionId,
+          sessionId: sid,
           workspaceRoot,
           artifact: { id: `art_${randomUUID()}`, type: "gitDiff", patch, changedFiles },
           summary,
+          iteration,
+          priorFeedback: prior.length > 0 ? prior : undefined,
           requestedAt: now,
         }),
       );
@@ -273,20 +280,25 @@ export default function (pi: ExtensionAPI) {
       // Write review request to bus
       const { randomUUID } = require("node:crypto");
       const requestId = `req_${randomUUID()}`;
-      const sessionId = `pi_${process.pid}_${Date.now()}`;
+      if (!sessionId) {
+        sessionId = `pi_${process.pid}_${Date.now()}`;
+      }
+      reviewIteration++;
       const workspaceRoot = ctx.cwd;
 
       ensureSchema(busDbPath);
-      const workspaceId = ensureWorkspaceAndSession(busDbPath, workspaceRoot, sessionId);
+      const workspaceId = ensureWorkspaceAndSession(busDbPath, workspaceRoot, sessionId!);
 
       writeReviewRequestedEvent(
         busDbPath,
         workspaceId,
-        sessionId,
+        sessionId!,
         requestId,
         workspaceRoot,
         patch,
         changedFiles,
+        reviewIteration,
+        priorFeedback,
         params.summary,
       );
 
@@ -298,7 +310,7 @@ export default function (pi: ExtensionAPI) {
       const pollMs = parseInt(process.env.ARP_REVIEW_POLL_MS ?? "2000", 10);
       const timeoutMs = parseInt(process.env.ARP_REVIEW_TIMEOUT_MS ?? "600000", 10);
 
-      const response = await pollForReviewResponse(busDbPath, sessionId, requestId, signal, pollMs, timeoutMs);
+      const response = await pollForReviewResponse(busDbPath, sessionId!, requestId, signal, pollMs, timeoutMs);
 
       if (!response) {
         return {
@@ -309,6 +321,14 @@ export default function (pi: ExtensionAPI) {
 
       // Format the review feedback for the agent
       const comments = response.review?.comments ?? [];
+
+      // Store this iteration's feedback for future iterations
+      priorFeedback.push({
+        iteration: reviewIteration,
+        comments,
+        summary: response.review?.summary,
+      });
+
       if (comments.length === 0) {
         return {
           content: [{ type: "text" as const, text: `Review completed with no comments. ${response.review?.summary ?? "Approved."}` }],
@@ -324,7 +344,7 @@ export default function (pi: ExtensionAPI) {
       });
 
       const feedbackText = [
-        `## Review Feedback`,
+        `## Review Feedback (iteration ${reviewIteration})`,
         "",
         response.review?.summary ? `Summary: ${response.review.summary}` : null,
         "",
@@ -364,11 +384,17 @@ export default function (pi: ExtensionAPI) {
       const path = require("node:path");
       busDbPath = path.join(ctx.cwd, ".arp", "bus", "arp.db");
     }
+    sessionId = `pi_${process.pid}_${Date.now()}`;
+    reviewIteration = 0;
+    priorFeedback = [];
     ensureSchema(busDbPath);
     ctx.ui.notify(`ARP: review tool ready -- bus at ${busDbPath}`, "info");
   });
 
   pi.on("session_shutdown", async () => {
     busDbPath = undefined;
+    sessionId = undefined;
+    reviewIteration = 0;
+    priorFeedback = [];
   });
 }

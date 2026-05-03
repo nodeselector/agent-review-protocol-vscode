@@ -11,6 +11,7 @@ export interface ReviewRequest {
   patch: string;
   changedFiles: Array<{ path: string; status: string }>;
   summary?: string;
+  iteration: number;
   requestedAt: string;
   eventSeq: number;
 }
@@ -58,6 +59,7 @@ export async function pollForReviewRequests(
           patch: payload.artifact.patch,
           changedFiles: payload.artifact.changedFiles as Array<{ path: string; status: string }>,
           summary: payload.summary,
+          iteration: payload.iteration ?? 1,
           requestedAt: payload.requestedAt,
           eventSeq: event.seq ?? 0,
         };

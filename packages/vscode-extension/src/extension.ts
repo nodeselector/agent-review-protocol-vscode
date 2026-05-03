@@ -22,6 +22,8 @@ import { ReviewOverviewProvider } from "./review-overview.js";
 import { ReviewStatusBar } from "./review-status-bar.js";
 import {
   addDraftComment,
+  bindReviewSession,
+  clearAllComments,
   clearDraftComments,
   ensureSession,
   formatDraftComments,
@@ -430,6 +432,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       activeReviewRequest = request;
+      await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
       await ensureSession(workspaceRoot);
       await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
         reviewComments,
@@ -440,7 +443,9 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       reviewCommentCodeLensProvider.setHasActiveSession(true);
       reviewComments.setHasActiveSession(true);
-      void vscode.window.showInformationMessage(`Review session started for ${request.changedFiles.length} files. Add your comments and submit.`);
+      void vscode.window.showInformationMessage(
+        `Review iteration ${request.iteration} started for ${request.changedFiles.length} files. Add your comments and submit.`,
+      );
     }),
     vscode.commands.registerCommand("arp.submitReviewResponse", async () => {
       const workspaceRoot = getWorkspaceRoot();

@@ -133,6 +133,12 @@ export interface ReviewRequestedEventPayload {
   workspaceRoot: string;
   artifact: Artifact;
   summary?: string;
+  iteration: number;
+  priorFeedback?: Array<{
+    iteration: number;
+    comments: Comment[];
+    summary?: string;
+  }>;
   requestedAt: string;
 }
 

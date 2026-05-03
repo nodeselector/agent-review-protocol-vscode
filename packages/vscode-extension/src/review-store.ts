@@ -5,6 +5,8 @@ import { nowIso, type Comment, type Session } from "../../protocol/src/index.js"
 
 export interface ReviewStore {
   session?: Session;
+  reviewSessionId?: string;
+  reviewIteration?: number;
   comments: Comment[];
 }
 
@@ -130,6 +132,49 @@ export async function clearDraftComments(workspaceRoot: string): Promise<void> {
   await saveReviewStore(workspaceRoot, {
     ...store,
     comments: store.comments.filter((comment) => comment.status !== "draft"),
+  });
+}
+
+export async function bindReviewSession(
+  workspaceRoot: string,
+  reviewSessionId: string,
+  iteration: number,
+): Promise<void> {
+  const store = await loadReviewStore(workspaceRoot);
+
+  if (store.reviewSessionId === reviewSessionId && store.reviewIteration === iteration) {
+    return;
+  }
+
+  const comments = store.comments.map((comment) =>
+    comment.status === "draft"
+      ? { ...comment, status: "outdated" as const }
+      : comment,
+  );
+
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    reviewSessionId,
+    reviewIteration: iteration,
+    comments,
+  });
+}
+
+export function getCommentsForCurrentIteration(store: ReviewStore): Comment[] {
+  return store.comments.filter((comment) => comment.status === "draft");
+}
+
+export function getCommentsFromPreviousIterations(store: ReviewStore): Comment[] {
+  return store.comments.filter((comment) => comment.status === "submitted" || comment.status === "outdated");
+}
+
+export async function clearAllComments(workspaceRoot: string): Promise<void> {
+  const store = await loadReviewStore(workspaceRoot);
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    comments: [],
+    reviewSessionId: undefined,
+    reviewIteration: undefined,
   });
 }
 
