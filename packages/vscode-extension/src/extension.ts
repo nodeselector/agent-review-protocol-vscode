@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { type CommentCategory } from "../../protocol/src/index.js";
+import { type Comment, type CommentCategory } from "../../protocol/src/index.js";
 import { sendJsonRpc } from "./rpc-client.js";
 import { captureGitDiffArtifact } from "./git-diff.js";
 import {
@@ -10,6 +10,7 @@ import {
 } from "./bus-review.js";
 import { ensureBusWorkerLoopRunning, stopBusWorkerLoop } from "./worker-manager.js";
 import { ReviewCommentsManager, DraftReviewComment } from "./review-comments.js";
+import { ReviewCommentCodeLensProvider } from "./review-comment-codelens.js";
 import {
   createReviewDiffUris,
   ReviewBaseContentProvider,
@@ -25,7 +26,9 @@ import {
   clearDraftComments,
   ensureSession,
   formatDraftComments,
+  getActiveDraftComments,
   loadReviewStore,
+  markDraftCommentsSubmitted,
 } from "./review-store.js";
 import { hydrateReviewSessionState } from "./review-session.js";
 
@@ -36,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const reviewFiles = new ReviewFilesProvider();
   const reviewOverview = new ReviewOverviewProvider();
   const reviewStatusBar = new ReviewStatusBar();
+  const reviewCommentCodeLensProvider = new ReviewCommentCodeLensProvider();
   const reviewBaseContentProvider = new ReviewBaseContentProvider();
   context.subscriptions.push(
     outputChannel,
@@ -43,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
     reviewFiles,
     reviewOverview,
     reviewStatusBar,
+    vscode.languages.registerCodeLensProvider({ scheme: "file" }, reviewCommentCodeLensProvider),
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_BASE_SCHEME, reviewBaseContentProvider),
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_EMPTY_SCHEME, reviewBaseContentProvider),
     vscode.window.registerTreeDataProvider("arpReviewFiles", reviewFiles),
@@ -53,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
     reviewFiles,
     reviewOverview,
     reviewStatusBar,
+    reviewCommentCodeLensProvider,
   });
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -61,6 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
         reviewFiles,
         reviewOverview,
         reviewStatusBar,
+        reviewCommentCodeLensProvider,
       });
     }),
   );
@@ -85,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): void {
           reviewFiles,
           reviewOverview,
           reviewStatusBar,
+          reviewCommentCodeLensProvider,
         });
         const config = getExtensionConfig();
         const response = await sendJsonRpc(
@@ -115,35 +123,16 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const body = await vscode.window.showInputBox({
-        prompt: "Draft review comment",
-        placeHolder: "Explain the feedback for the current line",
-        ignoreFocusOut: true,
-      });
-      if (!body) {
+      const comment = await promptAndCreateDraftComment(workspaceRoot, editor.document.uri, editor.selection);
+      if (!comment) {
         return;
       }
-
-      const category = (await vscode.window.showQuickPick(["note", "issue", "blocking"], {
-        title: "Comment category",
-        ignoreFocusOut: true,
-      })) as CommentCategory | undefined;
-      if (!category) {
-        return;
-      }
-
-      const comment = await addDraftComment(workspaceRoot, {
-        path: vscode.workspace.asRelativePath(editor.document.uri),
-        side: "new",
-        line: editor.selection.active.line + 1,
-        body,
-        category,
-      });
 
       await reviewComments.refresh();
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
       void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
     }),
   );
@@ -157,7 +146,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const store = await loadReviewStore(workspaceRoot);
-      const rendered = formatDraftComments(store.comments);
+      const rendered = formatDraftComments(getActiveDraftComments(store));
       const document = await vscode.workspace.openTextDocument({
         content: rendered,
         language: "markdown",
@@ -179,6 +168,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
       void vscode.window.showInformationMessage("Cleared ARP draft comments.");
     }),
   );
@@ -194,7 +184,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const config = getExtensionConfig();
       const session = await ensureSession(workspaceRoot);
       const store = await loadReviewStore(workspaceRoot);
-      if (store.comments.length === 0) {
+      const activeDraftComments = getActiveDraftComments(store);
+      if (activeDraftComments.length === 0) {
         void vscode.window.showWarningMessage("No draft comments to submit.");
         return;
       }
@@ -250,13 +241,23 @@ export function activate(context: vscode.ExtensionContext): void {
               review: {
                 event: "comment",
                 summary: "Draft review from VS Code",
-                comments: store.comments,
+                comments: activeDraftComments,
               },
               dbPath: busDbPath,
             });
 
             logJson("submitReviewToBus", result);
             logLine(`queued review command ${result.commandId}`);
+
+            await markDraftCommentsSubmitted(
+              workspaceRoot,
+              activeDraftComments.map((comment) => comment.id),
+            );
+            await reviewComments.refresh();
+            await reviewFiles.refresh();
+            await reviewOverview.refresh();
+            await reviewStatusBar.refresh();
+            reviewCommentCodeLensProvider.refresh();
 
             progress.report({ message: "waiting for review result" });
             const latest = await waitForRevisionFromBus({
@@ -276,12 +277,7 @@ export function activate(context: vscode.ExtensionContext): void {
               await reviewFiles.applyRevisionResult(latest.result);
               await reviewOverview.applyRevisionResult(latest.result);
               await reviewStatusBar.setLatestResult(latest.result);
-              void vscode.window.showInformationMessage("ARP review result received.");
-              await showReviewResult(
-                { result: latest.result },
-                artifact.changedFiles.length,
-                store.comments.length,
-              );
+              void vscode.window.showInformationMessage("ARP review result received. Threads and overview updated.");
               return;
             }
 
@@ -289,25 +285,6 @@ export function activate(context: vscode.ExtensionContext): void {
             void vscode.window.showWarningMessage(
               "ARP review queued. No result arrived before the wait timeout.",
             );
-            const document = await vscode.workspace.openTextDocument({
-              content: [
-                "# ARP Review Enqueued",
-                "",
-                `- Command: ${result.commandId}`,
-                `- Session: ${result.sessionId}`,
-                `- Workspace: ${result.workspaceId}`,
-                `- DB: ${result.dbPath}`,
-                `- Changed files: ${artifact.changedFiles.length}`,
-                `- Comments submitted: ${store.comments.length}`,
-                `- Wait timeout ms: ${config.busWaitTimeoutMs}`,
-                "",
-                "The review was enqueued into the local ARP bus.",
-                "No matching `revision.proposed` arrived before the wait timeout.",
-                "Run `ARP: Show Latest Bus Revision` after the worker finishes.",
-              ].join("\n"),
-              language: "markdown",
-            });
-            await vscode.window.showTextDocument(document, { preview: false });
           },
         );
       } catch (error) {
@@ -340,11 +317,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await reviewFiles.applyRevisionResult(latest.result);
         await reviewOverview.applyRevisionResult(latest.result);
         await reviewStatusBar.setLatestResult(latest.result);
-        await showReviewResult(
-          { result: latest.result },
-          "unknown",
-          latest.result.revision.resolutions.length,
-        );
+        void vscode.window.showInformationMessage("Latest ARP revision loaded into the review UI.");
       } catch (error) {
         outputChannel.show(true);
         void vscode.window.showErrorMessage(formatCommandError("show latest bus revision", error));
@@ -353,11 +326,34 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("arp.addDraftCommentAtRange", async (uri: vscode.Uri, range: vscode.Range) => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const comment = await promptAndCreateDraftComment(workspaceRoot, uri, range);
+      if (!comment) {
+        return;
+      }
+
+      await reviewComments.refresh();
+      await reviewFiles.refresh();
+      await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
+      void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
+    }),
+    vscode.commands.registerCommand("arp.openOverviewDraftComment", async (comment: Comment) => {
+      await openCommentInEditor(comment);
+    }),
     vscode.commands.registerCommand("arp.createDraftComment", async (reply: vscode.CommentReply) => {
       await reviewComments.createOrReply(reply);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
     }),
     vscode.commands.registerCommand("arp.editDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.edit(comment);
@@ -367,6 +363,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
     }),
     vscode.commands.registerCommand("arp.cancelEditDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.cancel(comment);
@@ -376,6 +373,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
+      reviewCommentCodeLensProvider.refresh();
     }),
     vscode.commands.registerCommand("arp.openReviewFileDiff", async (node: ReviewFileNode) => {
       const workspaceRoot = getWorkspaceRoot();
@@ -433,12 +431,14 @@ async function initializeReviewUi(
     reviewFiles: ReviewFilesProvider;
     reviewOverview: ReviewOverviewProvider;
     reviewStatusBar: ReviewStatusBar;
+    reviewCommentCodeLensProvider: ReviewCommentCodeLensProvider;
   },
 ): Promise<void> {
   await providers.reviewComments.setWorkspaceRoot(workspaceRoot);
   await providers.reviewFiles.setWorkspaceRoot(workspaceRoot);
   await providers.reviewOverview.setWorkspaceRoot(workspaceRoot);
   await providers.reviewStatusBar.setWorkspaceRoot(workspaceRoot);
+  providers.reviewCommentCodeLensProvider.setWorkspaceRoot(workspaceRoot);
 
   if (!workspaceRoot) {
     return;
@@ -477,6 +477,56 @@ function getExtensionConfig(): {
     busWorkerLoopCommand: config.get<string>("busWorkerLoopCommand", ""),
     busWorkerLoopPollIntervalMs: config.get<number>("busWorkerLoopPollIntervalMs", 1000),
   };
+}
+
+async function promptAndCreateDraftComment(
+  workspaceRoot: string,
+  uri: vscode.Uri,
+  range: vscode.Range,
+): Promise<Comment | undefined> {
+  const body = await vscode.window.showInputBox({
+    prompt: "Draft review comment",
+    placeHolder: "Explain the feedback for this change",
+    ignoreFocusOut: true,
+  });
+  if (!body) {
+    return undefined;
+  }
+
+  const category = (await vscode.window.showQuickPick(["note", "issue", "blocking"], {
+    title: "Comment category",
+    ignoreFocusOut: true,
+  })) as CommentCategory | undefined;
+  if (!category) {
+    return undefined;
+  }
+
+  return await addDraftComment(workspaceRoot, {
+    path: vscode.workspace.asRelativePath(uri),
+    side: "new",
+    line: range.start.line + 1,
+    startLine: range.start.line + 1,
+    endLine: range.end.line + 1,
+    body,
+    category,
+  });
+}
+
+async function openCommentInEditor(comment: Comment): Promise<void> {
+  const workspaceRoot = getWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showErrorMessage("Open a workspace first.");
+    return;
+  }
+
+  const uri = vscode.Uri.file(`${workspaceRoot}/${comment.path}`);
+  const line = (comment.line ?? comment.startLine ?? 1) - 1;
+  const selection = new vscode.Range(line, 0, line, 0);
+  const document = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(document, {
+    preview: false,
+    selection,
+  });
 }
 
 function formatCommandError(action: string, error: unknown): string {

@@ -8,8 +8,10 @@ import {
   clearDraftComments,
   ensureSession,
   formatDraftComments,
+  getActiveDraftComments,
   getStorePath,
   loadReviewStore,
+  markDraftCommentsSubmitted,
   removeDraftComment,
   updateDraftComment,
 } from "../packages/vscode-extension/dist/vscode-extension/src/review-store.js";
@@ -81,9 +83,9 @@ test("removeDraftComment removes one draft comment", async () => {
   assert.equal(store.comments.length, 0);
 });
 
-test("clearDraftComments removes all draft comments", async () => {
+test("markDraftCommentsSubmitted moves active drafts out of the next review", async () => {
   const workspaceRoot = await makeWorkspace();
-  await addDraftComment(workspaceRoot, {
+  const comment = await addDraftComment(workspaceRoot, {
     path: "src/fs.ts",
     side: "new",
     startLine: 112,
@@ -92,9 +94,38 @@ test("clearDraftComments removes all draft comments", async () => {
     category: "note",
   });
 
+  const submitted = await markDraftCommentsSubmitted(workspaceRoot, [comment.id]);
+  const store = await loadReviewStore(workspaceRoot);
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0]?.status, "submitted");
+  assert.equal(store.comments.length, 1);
+  assert.equal(store.comments[0]?.status, "submitted");
+  assert.equal(getActiveDraftComments(store).length, 0);
+});
+
+test("clearDraftComments removes only active draft comments", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const comment = await addDraftComment(workspaceRoot, {
+    path: "src/fs.ts",
+    side: "new",
+    startLine: 112,
+    endLine: 130,
+    body: "Extract this branch.",
+    category: "note",
+  });
+  await markDraftCommentsSubmitted(workspaceRoot, [comment.id]);
+  await addDraftComment(workspaceRoot, {
+    path: "src/fs.ts",
+    side: "new",
+    line: 200,
+    body: "Fresh draft.",
+    category: "issue",
+  });
+
   await clearDraftComments(workspaceRoot);
   const store = await loadReviewStore(workspaceRoot);
-  assert.equal(store.comments.length, 0);
+  assert.equal(store.comments.length, 1);
+  assert.equal(store.comments[0]?.status, "submitted");
 });
 
 test("formatDraftComments renders readable output", () => {

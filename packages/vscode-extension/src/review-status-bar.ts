@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import { loadReviewStore } from "./review-store.js";
+import { getActiveDraftComments, loadReviewStore } from "./review-store.js";
 import type { AdapterReviewResult, ResolutionStatus } from "../../protocol/src/index.js";
 
 export class ReviewStatusBar implements vscode.Disposable {
@@ -44,7 +44,7 @@ export class ReviewStatusBar implements vscode.Disposable {
         loadReviewStore(this.workspaceRoot),
         captureGitDiffArtifact(this.workspaceRoot),
       ]);
-      return { comments: store.comments.length, files: artifact.changedFiles.length };
+      return { comments: getActiveDraftComments(store).length, files: artifact.changedFiles.length };
     } catch {
       return { comments: 0, files: 0 };
     }
@@ -58,12 +58,19 @@ export class ReviewStatusBar implements vscode.Disposable {
       return;
     }
 
-    const summary = this.latestResult ? summarizeLatestResult(this.latestResult) : `${counts.comments} draft, ${counts.files} files`;
+    const hasActiveDrafts = counts.comments > 0;
+    const summary = hasActiveDrafts
+      ? `${counts.comments} draft, ${counts.files} files`
+      : this.latestResult
+        ? summarizeLatestResult(this.latestResult)
+        : `0 draft, ${counts.files} files`;
     this.item.text = `$(comment-discussion) ARP ${summary}`;
-    this.item.tooltip = this.latestResult
-      ? `ARP latest result: ${summary}`
-      : `ARP review in progress: ${counts.comments} draft comments across ${counts.files} changed files`;
-    this.item.command = this.latestResult ? "arp.showLatestBusRevision" : "arp.submitReview";
+    this.item.tooltip = hasActiveDrafts
+      ? `ARP review in progress: ${counts.comments} draft comments across ${counts.files} changed files`
+      : this.latestResult
+        ? `ARP latest result: ${summary}`
+        : `ARP review ready: ${counts.files} changed files`;
+    this.item.command = hasActiveDrafts ? "arp.submitReview" : this.latestResult ? "arp.showLatestBusRevision" : "arp.openNextReviewFile";
   }
 }
 

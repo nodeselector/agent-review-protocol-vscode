@@ -204,8 +204,8 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
 
 export class DraftReviewComment implements vscode.Comment {
   readonly id: string;
-  readonly author: vscode.CommentAuthorInformation = { name: "ARP draft" };
-  readonly contextValue = COMMENT_CONTEXT_VALUE;
+  readonly author: vscode.CommentAuthorInformation;
+  readonly contextValue: string;
   readonly timestamp = new Date();
   readonly label?: string;
   mode: vscode.CommentMode = vscode.CommentMode.Preview;
@@ -215,9 +215,11 @@ export class DraftReviewComment implements vscode.Comment {
 
   constructor(private readonly comment: Comment) {
     this.id = comment.id;
+    this.author = { name: comment.status === "draft" ? "ARP draft" : "ARP submitted" };
+    this.contextValue = comment.status === "draft" ? COMMENT_CONTEXT_VALUE : "arp-submitted-comment";
     this.body = comment.body;
     this.originalBody = comment.body;
-    this.label = comment.category ?? "note";
+    this.label = `${comment.status} - ${comment.category ?? "note"}`;
     this.range = toRange(comment);
   }
 
@@ -277,11 +279,12 @@ function asPlainText(body: string | vscode.MarkdownString): string {
 }
 
 function buildThreadLabel(comment: Comment, resolution?: CommentResolution): string {
+  const prefix = comment.status === "draft" ? "ARP draft" : "ARP submitted";
   if (!resolution) {
-    return `ARP draft - ${comment.category ?? "note"}`;
+    return `${prefix} - ${comment.category ?? "note"}`;
   }
 
-  return `ARP draft - ${comment.category ?? "note"} - ${prettyResolutionStatus(resolution.status)}`;
+  return `${prefix} - ${comment.category ?? "note"} - ${prettyResolutionStatus(resolution.status)}`;
 }
 
 function mapThreadState(status?: ResolutionStatus): vscode.CommentThreadState {

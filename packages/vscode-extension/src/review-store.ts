@@ -8,6 +8,10 @@ export interface ReviewStore {
   comments: Comment[];
 }
 
+export function getActiveDraftComments(store: ReviewStore): Comment[] {
+  return store.comments.filter((comment) => comment.status === "draft");
+}
+
 export async function loadReviewStore(workspaceRoot: string): Promise<ReviewStore> {
   const storePath = getStorePath(workspaceRoot);
 
@@ -97,11 +101,35 @@ export async function removeDraftComment(workspaceRoot: string, commentId: strin
   });
 }
 
+export async function markDraftCommentsSubmitted(workspaceRoot: string, commentIds?: string[]): Promise<Comment[]> {
+  const store = await loadReviewStore(workspaceRoot);
+  const selectedIds = commentIds ? new Set(commentIds) : undefined;
+  const comments = store.comments.map((comment) => {
+    if (comment.status !== "draft") {
+      return comment;
+    }
+    if (selectedIds && !selectedIds.has(comment.id)) {
+      return comment;
+    }
+    return {
+      ...comment,
+      status: "submitted",
+    } satisfies Comment;
+  });
+
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    comments,
+  });
+
+  return comments.filter((comment) => comment.status === "submitted" && (!selectedIds || selectedIds.has(comment.id)));
+}
+
 export async function clearDraftComments(workspaceRoot: string): Promise<void> {
   const store = await loadReviewStore(workspaceRoot);
   await saveReviewStore(workspaceRoot, {
     ...store,
-    comments: [],
+    comments: store.comments.filter((comment) => comment.status !== "draft"),
   });
 }
 

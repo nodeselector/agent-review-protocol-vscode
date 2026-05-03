@@ -25,16 +25,17 @@ Local prototype. This repo currently contains:
 - package workspace layout
 - initial protocol types
 - reference server
+
 - VS Code command-driven review scaffold
 - bus-backed review submission path via local SQLite as the primary review flow
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
-- active review overview sidebar with session, draft, file, and latest result summary plus quick actions
+- active review overview sidebar with session, expandable draft comments, file, and latest result summary plus quick actions
 - automatic hydration of latest review result from the bus on activation/workspace switch
 - status bar summary for the active review with one-click jump back into the flow
 - changed-files sidebar for the active review with diff opening against HEAD, draft counts, and result status summaries
 - latest revision results projected back onto inline draft comment threads
-- bounded wait path so bus submit can auto-open a result when the worker finishes in time
+- bounded wait path so bus submit can sync results back into the native review UI when the worker finishes in time
 - lazy in-editor worker supervisor that can auto-start the local bus worker loop
 - pi-backed review execution with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
@@ -77,14 +78,13 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 
 1. `ARP: Start Session`
-2. `ARP: Add Draft Comment at Cursor`
-3. `ARP: Show Draft Comments`
-4. Check `ARP Review Overview` for active session and review status
-5. Use the `ARP Review Overview` action or `ARP Review Files` view to open the next review file diff
-6. `ARP: Submit Review`
-7. `ARP: Show Latest Bus Revision`
+2. `ARP: Add Draft Comment at Cursor` or use `Add ARP draft comment` inline on a changed line
+3. Check `ARP Review Overview` for active session, expandable draft comments, and review status
+4. Use the `ARP Review Overview` action or `ARP Review Files` view to open the next review file diff
+5. `ARP: Submit Review`
+6. `ARP: Show Latest Bus Revision`
 
-You should get a markdown result document plus raw JSON in the ARP output channel.
+You should see draft comments and result state stay inside the native review UI. Raw JSON still lands in the ARP output channel.
 
 If your binaries are not on `PATH`, use the local wrapper scripts from this repo in VS Code settings:
 

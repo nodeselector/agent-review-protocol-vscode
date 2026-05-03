@@ -75,16 +75,17 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 2. Run `ARP: Add Draft Comment at Cursor`.
 3. Enter comment text.
 4. Pick a category.
-5. Run `ARP: Show Draft Comments`.
-6. Confirm the generated document lists your comment.
-7. Run `ARP: Clear Draft Comments`.
-8. Run `ARP: Show Draft Comments` again and confirm it says `No draft comments.`
+5. Open a changed file and confirm `Add ARP draft comment` appears inline on commentable changed lines.
+6. Confirm the `ARP Review Overview` view expands `Draft comments` and shows the actual draft entries inline in the sidebar.
+7. Click one draft entry and confirm it jumps to the file/line.
+8. Run `ARP: Clear Draft Comments`.
+9. Confirm the `Draft comments` section drops back to `0`.
 
 ### Validate review overview sidebar
 
 1. Confirm the `ARP Review Overview` view shows:
    - session state
-   - draft comment count
+   - expandable draft comments
    - changed file count
    - latest result summary
 2. Use the overview actions to start a session, open the next review file, or submit a review.
@@ -104,14 +105,10 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 2. Ensure the repo has a non-empty `git diff`.
 3. Run `ARP: Submit Review`.
 4. Confirm the extension auto-starts or reuses a local worker loop when `arp.autoStartBusWorkerLoop` is enabled.
-5. If the worker processes quickly enough, confirm a markdown review result opens automatically.
-6. Otherwise confirm the enqueue document contains:
-   - command ID
-   - session ID
-   - workspace ID
-   - DB path
-   - wait timeout
-7. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
+5. Confirm submitted comments no longer remain in the active `Draft comments` section.
+6. If the worker processes quickly enough, confirm inline threads, the overview, and the status bar update without opening a markdown buffer.
+7. If the worker is slower, confirm you get a bounded notification instead of a stuck editor.
+8. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
 
 ### Validate persistent local worker loop
 
@@ -129,9 +126,9 @@ scripts/arp-bus-worker-loop --db /absolute/path/to/workspace/.arp/bus/arp.db --p
 
 1. After the worker runs, return to the Extension Development Host.
 2. Run `ARP: Show Latest Bus Revision`.
-3. Confirm a markdown review result opens.
-4. Confirm it reflects the latest `revision.proposed` event for the current session.
-5. Confirm inline draft comment threads are annotated with the latest resolution status/result note.
+3. Confirm it reflects the latest `revision.proposed` event for the current session.
+4. Confirm inline submitted comment threads are annotated with the latest resolution status/result note.
+5. Confirm the overview and status bar also refresh.
 
 ## 3. Live-mode QA
 

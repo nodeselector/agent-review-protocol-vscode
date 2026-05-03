@@ -63,6 +63,14 @@
         "title": "ARP: Open Next Review File"
       },
       {
+        "command": "arp.addDraftCommentAtRange",
+        "title": "ARP: Add Draft Comment at Range"
+      },
+      {
+        "command": "arp.openOverviewDraftComment",
+        "title": "ARP: Open Draft Comment"
+      },
+      {
         "command": "arp.createDraftComment",
         "title": "ARP: Create Draft Comment"
       },

@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import { loadReviewStore, type ReviewStore } from "./review-store.js";
-import type { AdapterReviewResult, ResolutionStatus, Session } from "../../protocol/src/index.js";
+import { getActiveDraftComments, loadReviewStore, type ReviewStore } from "./review-store.js";
+import type { AdapterReviewResult, Comment, ResolutionStatus, Session } from "../../protocol/src/index.js";
 
 export interface ReviewOverviewState {
   session?: Session;
-  draftCommentCount: number;
+  draftComments: Comment[];
   changedFileCount: number;
   latestResult?: AdapterReviewResult;
 }
@@ -15,7 +15,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
   private workspaceRoot?: string;
   private state: ReviewOverviewState = {
-    draftCommentCount: 0,
+    draftComments: [],
     changedFileCount: 0,
   };
 
@@ -34,7 +34,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
 
   async refresh(): Promise<void> {
     if (!this.workspaceRoot) {
-      this.state = { draftCommentCount: 0, changedFileCount: 0 };
+      this.state = { draftComments: [], changedFileCount: 0 };
       this.onDidChangeTreeDataEmitter.fire(undefined);
       return;
     }
@@ -44,7 +44,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
     this.state = {
       ...this.state,
       session: store.session,
-      draftCommentCount: store.comments.length,
+      draftComments: sortDraftComments(getActiveDraftComments(store)),
       changedFileCount,
     };
     this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -60,7 +60,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
 
   getChildren(element?: ReviewOverviewNode): Thenable<ReviewOverviewNode[]> {
     if (element) {
-      return Promise.resolve([]);
+      return Promise.resolve(element.children ?? []);
     }
 
     return Promise.resolve(buildOverviewNodes(this.state));
@@ -72,74 +72,115 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
 }
 
 export class ReviewOverviewNode extends vscode.TreeItem {
-  constructor(label: string, description?: string, command?: vscode.Command, icon?: string) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.description = description;
-    this.command = command;
-    this.iconPath = icon ? new vscode.ThemeIcon(icon) : undefined;
+  constructor(
+    label: string,
+    options: {
+      description?: string;
+      command?: vscode.Command;
+      icon?: string;
+      collapsibleState?: vscode.TreeItemCollapsibleState;
+      tooltip?: string;
+      children?: ReviewOverviewNode[];
+    } = {},
+  ) {
+    super(label, options.collapsibleState ?? vscode.TreeItemCollapsibleState.None);
+    this.description = options.description;
+    this.command = options.command;
+    this.tooltip = options.tooltip;
+    this.iconPath = options.icon ? new vscode.ThemeIcon(options.icon) : undefined;
+    this.children = options.children;
   }
+
+  readonly children?: ReviewOverviewNode[];
 }
 
 function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
   const nodes: ReviewOverviewNode[] = [];
 
   nodes.push(
-    new ReviewOverviewNode(
-      "Session",
-      state.session?.id ?? "not started",
-      { command: "arp.startSession", title: "Start Session" },
-      "history",
-    ),
+    new ReviewOverviewNode("Session", {
+      description: state.session?.id ?? "not started",
+      command: { command: "arp.startSession", title: "Start Session" },
+      icon: "history",
+    }),
   );
 
-  nodes.push(
-    new ReviewOverviewNode(
-      "Draft comments",
-      String(state.draftCommentCount),
-      { command: "arp.showDraftComments", title: "Show Draft Comments" },
-      "comment-discussion",
-    ),
-  );
+  nodes.push(buildDraftCommentsNode(state.draftComments));
 
   nodes.push(
-    new ReviewOverviewNode(
-      "Changed files",
-      String(state.changedFileCount),
-      { command: "arp.openNextReviewFile", title: "Open Next Review File" },
-      "files",
-    ),
+    new ReviewOverviewNode("Changed files", {
+      description: String(state.changedFileCount),
+      command: { command: "arp.openNextReviewFile", title: "Open Next Review File" },
+      icon: "files",
+    }),
   );
 
   if (state.latestResult) {
     nodes.push(
-      new ReviewOverviewNode(
-        "Latest result",
-        `${state.latestResult.mode} - ${summarizeLatestResult(state.latestResult)}`,
-        { command: "arp.showLatestBusRevision", title: "Show Latest Bus Revision" },
-        state.latestResult.mode === "live" ? "sparkle" : "check",
-      ),
+      new ReviewOverviewNode("Latest result", {
+        description: `${state.latestResult.mode} - ${summarizeLatestResult(state.latestResult)}`,
+        command: { command: "arp.showLatestBusRevision", title: "Show Latest Bus Revision" },
+        icon: state.latestResult.mode === "live" ? "sparkle" : "check",
+      }),
     );
   } else {
     nodes.push(
-      new ReviewOverviewNode(
-        "Latest result",
-        "none yet",
-        { command: "arp.showLatestBusRevision", title: "Show Latest Bus Revision" },
-        "circle-large-outline",
-      ),
+      new ReviewOverviewNode("Latest result", {
+        description: "none yet",
+        command: { command: "arp.showLatestBusRevision", title: "Show Latest Bus Revision" },
+        icon: "circle-large-outline",
+      }),
     );
   }
 
   nodes.push(
-    new ReviewOverviewNode(
-      "Submit review",
-      state.draftCommentCount > 0 ? `${state.draftCommentCount} draft comments ready` : "no draft comments",
-      { command: "arp.submitReview", title: "Submit Review" },
-      "send",
-    ),
+    new ReviewOverviewNode("Submit review", {
+      description: state.draftComments.length > 0 ? `${state.draftComments.length} draft comments ready` : "no draft comments",
+      command: { command: "arp.submitReview", title: "Submit Review" },
+      icon: "send",
+    }),
   );
 
   return nodes;
+}
+
+function buildDraftCommentsNode(draftComments: Comment[]): ReviewOverviewNode {
+  if (draftComments.length === 0) {
+    return new ReviewOverviewNode("Draft comments", {
+      description: "0",
+      icon: "comment-discussion",
+    });
+  }
+
+  const children = draftComments.map((comment) => {
+    const line = comment.line ?? comment.startLine ?? 1;
+    return new ReviewOverviewNode(truncate(comment.body), {
+      description: `${comment.path}:${line}`,
+      tooltip: `${comment.path}:${line}\n\n${comment.body}`,
+      command: {
+        command: "arp.openOverviewDraftComment",
+        title: "Open Draft Comment",
+        arguments: [comment],
+      },
+      icon: iconForCategory(comment.category),
+    });
+  });
+
+  return new ReviewOverviewNode("Draft comments", {
+    description: String(draftComments.length),
+    icon: "comment-discussion",
+    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+    children,
+  });
+}
+
+function sortDraftComments(comments: Comment[]): Comment[] {
+  return [...comments].sort((a, b) => {
+    if (a.path !== b.path) {
+      return a.path.localeCompare(b.path);
+    }
+    return (a.line ?? a.startLine ?? 0) - (b.line ?? b.startLine ?? 0);
+  });
 }
 
 function summarizeLatestResult(result: AdapterReviewResult): string {
@@ -157,6 +198,24 @@ function summarizeLatestResult(result: AdapterReviewResult): string {
     parts.push(`${count} ${status.replace(/_/g, " ")}`);
   }
   return parts.join(", ");
+}
+
+function truncate(text: string, max = 48): string {
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function iconForCategory(category?: Comment["category"]): string {
+  switch (category) {
+    case "blocking":
+      return "error";
+    case "issue":
+      return "warning";
+    default:
+      return "comment";
+  }
 }
 
 async function loadSafeReviewStore(workspaceRoot: string): Promise<ReviewStore> {
