@@ -457,6 +457,19 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       reviewCommentCodeLensProvider.setHasActiveSession(true);
       reviewComments.setHasActiveSession(true);
+
+      // Auto-open the first changed file diff so commenting ranges are active
+      const firstFile = reviewFiles.getFirstPendingFile();
+      if (firstFile) {
+        const { left, right } = createReviewDiffUris(workspaceRoot, firstFile.file);
+        await vscode.commands.executeCommand(
+          "vscode.diff",
+          left,
+          right,
+          `${firstFile.file.path} (ARP Review)`,
+        );
+      }
+
       void vscode.window.showInformationMessage(
         `Review iteration ${request.iteration} started for ${request.changedFiles.length} files. Add your comments and submit.`,
       );
