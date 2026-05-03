@@ -103,8 +103,8 @@ What is still missing:
 - subscription-driven projection or read model for review state
 - replacing the direct RPC submit path as the default review UX
 - moving from bounded polling to a proper event-driven watcher
-- deciding how the persistent worker loop is launched and supervised in normal use
+- deciding whether worker supervision should remain editor-local or move to a separate local service
 
 ## Next implementation step
 
-Teach the editor to manage or discover a long-lived local worker, or add a lightweight supervisor outside the editor.
+Use the new lazy editor-local supervisor as a bridge, then decide whether to harden it in-editor or extract it into a separate local daemon.

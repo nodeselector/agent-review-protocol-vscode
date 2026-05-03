@@ -28,6 +28,7 @@ Current automated coverage includes:
 - bus enqueue tests for `review.submit`
 - local worker tests for `review.submit` -> `revision.proposed`
 - persistent worker loop tests for idle stop, max iterations, and signal shutdown
+- worker supervisor tests for lazy process start and reuse inside the extension host
 - VS Code bus read tests for latest session revision lookup
 - checkpointed wait tests for auto-opening bus results when they arrive in time
 - pi adapter prompt + normalization tests
@@ -95,14 +96,15 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
 1. Add one draft comment again.
 2. Ensure the repo has a non-empty `git diff`.
 3. Run `ARP: Submit Review to Bus`.
-4. If the worker processes quickly enough, confirm a markdown review result opens automatically.
-5. Otherwise confirm the enqueue document contains:
+4. Confirm the extension auto-starts or reuses a local worker loop when `arp.autoStartBusWorkerLoop` is enabled.
+5. If the worker processes quickly enough, confirm a markdown review result opens automatically.
+6. Otherwise confirm the enqueue document contains:
    - command ID
    - session ID
    - workspace ID
    - DB path
    - wait timeout
-6. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
+7. Confirm the SQLite DB exists at `.arp/bus/arp.db` unless `arp.busDbPath` is set.
 
 ### Validate one-shot local worker
 

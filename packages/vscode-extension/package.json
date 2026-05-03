@@ -96,6 +96,22 @@
           "default": 500,
           "minimum": 50,
           "description": "Polling interval in milliseconds while waiting for a matching revision.proposed event."
+        },
+        "arp.autoStartBusWorkerLoop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start or reuse a local ARP bus worker loop when submitting a review to the bus."
+        },
+        "arp.busWorkerLoopCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Optional command used to start the persistent ARP bus worker loop. If empty, the extension tries to find scripts/arp-bus-worker-loop in the local repo checkout."
+        },
+        "arp.busWorkerLoopPollIntervalMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 50,
+          "description": "Polling interval passed to the persistent ARP bus worker loop."
         }
       }
     }

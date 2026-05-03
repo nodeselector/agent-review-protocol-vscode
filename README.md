@@ -30,6 +30,7 @@ Local prototype. This repo currently contains:
 - local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
+- lazy in-editor worker supervisor that can auto-start the local bus worker loop
 - pi adapter with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
@@ -84,6 +85,9 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 - `arp.busDbPath` - optional override for the local SQLite bus database
 - `arp.busWaitTimeoutMs` - how long bus submit waits for a matching result before falling back to enqueue-only confirmation
 - `arp.busPollIntervalMs` - poll interval while waiting for a bus result
+- `arp.autoStartBusWorkerLoop` - lazily start or reuse a local worker loop on bus submit
+- `arp.busWorkerLoopCommand` - optional explicit command for the persistent worker loop
+- `arp.busWorkerLoopPollIntervalMs` - polling interval used by the persistent worker loop
 - `scripts/arp-bus-worker --db /absolute/path/to/.arp/bus/arp.db` - process one queued review command
 - `scripts/arp-bus-worker-loop --db /absolute/path/to/.arp/bus/arp.db` - keep polling and process queued review commands until stopped
 

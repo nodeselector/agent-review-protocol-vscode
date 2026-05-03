@@ -8,6 +8,7 @@ import {
   getLatestRevisionFromBus,
   waitForRevisionFromBus,
 } from "./bus-review.js";
+import { ensureBusWorkerLoopRunning, stopBusWorkerLoop } from "./worker-manager.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -20,6 +21,11 @@ const outputChannel = vscode.window.createOutputChannel("ARP");
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(outputChannel);
+  context.subscriptions.push({
+    dispose: () => {
+      void stopBusWorkerLoop();
+    },
+  });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.startSession", async () => {
@@ -213,6 +219,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const busDbPath = config.busDbPath || undefined;
+        if (config.autoStartBusWorkerLoop) {
+          const worker = await ensureBusWorkerLoopRunning({
+            workspaceRoot,
+            dbPath: busDbPath ?? `${workspaceRoot}/.arp/bus/arp.db`,
+            command: config.busWorkerLoopCommand || undefined,
+            pollIntervalMs: config.busWorkerLoopPollIntervalMs,
+            onStdout: (line) => logLine(`busWorkerLoop.stdout ${line}`),
+            onStderr: (line) => logLine(`busWorkerLoop.stderr ${line}`),
+          });
+          logJson("busWorkerLoop", worker);
+        }
+
         const afterSeq = await getCurrentBusEventSeq(workspaceRoot, busDbPath);
         const result = await enqueueDraftReviewToBus({
           workspaceRoot,
@@ -324,6 +342,9 @@ function getExtensionConfig(): {
   busDbPath: string;
   busWaitTimeoutMs: number;
   busPollIntervalMs: number;
+  autoStartBusWorkerLoop: boolean;
+  busWorkerLoopCommand: string;
+  busWorkerLoopPollIntervalMs: number;
 } {
   const config = vscode.workspace.getConfiguration("arp");
 
@@ -335,6 +356,9 @@ function getExtensionConfig(): {
     busDbPath: config.get<string>("busDbPath", ""),
     busWaitTimeoutMs: config.get<number>("busWaitTimeoutMs", 15000),
     busPollIntervalMs: config.get<number>("busPollIntervalMs", 500),
+    autoStartBusWorkerLoop: config.get<boolean>("autoStartBusWorkerLoop", true),
+    busWorkerLoopCommand: config.get<string>("busWorkerLoopCommand", ""),
+    busWorkerLoopPollIntervalMs: config.get<number>("busWorkerLoopPollIntervalMs", 1000),
   };
 }
 
@@ -351,6 +375,10 @@ function logJson(label: string, value: unknown): void {
   outputChannel.appendLine(`## ${label}`);
   outputChannel.appendLine(JSON.stringify(value, null, 2));
   outputChannel.appendLine("");
+}
+
+function logLine(line: string): void {
+  outputChannel.appendLine(line);
 }
 
 async function showReviewResult(
