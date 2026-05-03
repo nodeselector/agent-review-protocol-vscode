@@ -6,9 +6,15 @@ export class ReviewCommentCodeLensProvider implements vscode.CodeLensProvider {
   private readonly onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this.onDidChangeCodeLensesEmitter.event;
   private workspaceRoot?: string;
+  private hasActiveSession = false;
 
   setWorkspaceRoot(workspaceRoot: string | undefined): void {
     this.workspaceRoot = workspaceRoot;
+    this.refresh();
+  }
+
+  setHasActiveSession(hasActiveSession: boolean): void {
+    this.hasActiveSession = hasActiveSession;
     this.refresh();
   }
 
@@ -17,7 +23,7 @@ export class ReviewCommentCodeLensProvider implements vscode.CodeLensProvider {
   }
 
   async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
-    if (!this.workspaceRoot || document.uri.scheme !== "file") {
+    if (!this.workspaceRoot || !this.hasActiveSession || document.uri.scheme !== "file") {
       return [];
     }
 

@@ -107,6 +107,7 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         logJson("startSession", response);
+        reviewCommentCodeLensProvider.setHasActiveSession(true);
         void vscode.window.showInformationMessage(`ARP session ready: ${localSession.id}`);
       } catch (error) {
         void vscode.window.showErrorMessage(formatCommandError("start session", error));
@@ -439,12 +440,14 @@ async function initializeReviewUi(
   await providers.reviewOverview.setWorkspaceRoot(workspaceRoot);
   await providers.reviewStatusBar.setWorkspaceRoot(workspaceRoot);
   providers.reviewCommentCodeLensProvider.setWorkspaceRoot(workspaceRoot);
+  providers.reviewCommentCodeLensProvider.setHasActiveSession(false);
 
   if (!workspaceRoot) {
     return;
   }
 
   const hydrated = await hydrateReviewSessionState(workspaceRoot, busDbPath);
+  providers.reviewCommentCodeLensProvider.setHasActiveSession(Boolean(hydrated.session));
   await providers.reviewComments.setLatestResult(hydrated.latestResult);
   await providers.reviewFiles.setLatestResult(hydrated.latestResult);
   await providers.reviewOverview.setLatestResult(hydrated.latestResult);
