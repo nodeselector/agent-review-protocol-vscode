@@ -355,11 +355,15 @@ export function activate(context: vscode.ExtensionContext): void {
       await openCommentInEditor(comment);
     }),
     vscode.commands.registerCommand("arp.createDraftComment", async (reply: vscode.CommentReply) => {
-      await reviewComments.createOrReply(reply);
+      const comment = await reviewComments.createOrReply(reply);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
       await reviewStatusBar.refresh();
       reviewCommentCodeLensProvider.refresh();
+      if (comment) {
+        await revealDraftCommentInOverview(reviewOverviewView, reviewOverview, comment);
+        void vscode.window.showInformationMessage(formatAddedCommentMessage(comment));
+      }
     }),
     vscode.commands.registerCommand("arp.editDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.edit(comment);
@@ -513,11 +517,12 @@ async function promptAndCreateDraftComment(
 
   const relativePath = vscode.workspace.asRelativePath(uri);
   const artifact = await captureGitDiffArtifact(workspaceRoot);
-  const isReviewRange = parseCommentingRangesFromPatch(artifact.patch, relativePath).some(
-    (patchRange) => range.start.line + 1 >= patchRange.startLine && range.start.line + 1 <= patchRange.endLine,
-  );
-
   const selectedRange = normalizeCommentRange(uri, range);
+  const isReviewRange = parseCommentingRangesFromPatch(artifact.patch, relativePath).some(
+    (patchRange) =>
+      selectedRange.start.line + 1 <= patchRange.endLine &&
+      patchRange.startLine <= selectedRange.end.line + 1,
+  );
 
   return await addDraftComment(workspaceRoot, {
     path: relativePath,

@@ -97,33 +97,33 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     };
   }
 
-  async createOrReply(reply: vscode.CommentReply): Promise<void> {
+  async createOrReply(reply: vscode.CommentReply): Promise<Comment | undefined> {
     if (!this.workspaceRoot) {
-      return;
+      return undefined;
     }
 
     const body = reply.text.trim();
     if (!body) {
-      return;
+      return undefined;
     }
 
     await ensureSession(this.workspaceRoot);
     const relativePath = normalizeRelativePath(this.workspaceRoot, reply.thread.uri.fsPath);
     if (!relativePath) {
-      return;
+      return undefined;
     }
 
-    const range = reply.thread.range;
+    const range = normalizeReplyRange(reply.thread.uri, reply.thread.range);
     if (!range) {
-      return;
+      return undefined;
     }
 
     const artifact = await captureGitDiffArtifact(this.workspaceRoot);
     const isReviewRange = parseCommentingRangesFromPatch(artifact.patch, relativePath).some(
-      (patchRange) => range.start.line + 1 >= patchRange.startLine && range.start.line + 1 <= patchRange.endLine,
+      (patchRange) => rangesOverlap(range.start.line + 1, range.end.line + 1, patchRange.startLine, patchRange.endLine),
     );
 
-    await addDraftComment(this.workspaceRoot, {
+    const comment = await addDraftComment(this.workspaceRoot, {
       path: relativePath,
       side: "new",
       line: range.start.line + 1,
@@ -135,6 +135,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     });
 
     await this.refresh();
+    return comment;
   }
 
   edit(comment: DraftReviewComment): void {
@@ -282,6 +283,18 @@ function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | 
 
 function asPlainText(body: string | vscode.MarkdownString): string {
   return typeof body === "string" ? body : body.value;
+}
+
+function normalizeReplyRange(uri: vscode.Uri, fallbackRange?: vscode.Range): vscode.Range | undefined {
+  const editor = vscode.window.activeTextEditor;
+  if (editor && editor.document.uri.toString() === uri.toString() && !editor.selection.isEmpty) {
+    return new vscode.Range(editor.selection.start.line, 0, editor.selection.end.line, 0);
+  }
+  return fallbackRange;
+}
+
+function rangesOverlap(startA: number, endA: number, startB: number, endB: number): boolean {
+  return startA <= endB && startB <= endA;
 }
 
 function buildThreadLabel(comment: Comment, resolution?: CommentResolution): string {
