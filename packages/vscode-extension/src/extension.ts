@@ -111,8 +111,6 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         logJson("startSession", response);
-        reviewCommentCodeLensProvider.setHasActiveSession(true);
-        reviewComments.setHasActiveSession(true);
         void vscode.window.showInformationMessage(`ARP session ready: ${localSession.id}`);
       } catch (error) {
         void vscode.window.showErrorMessage(formatCommandError("start session", error));
@@ -122,6 +120,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.addDraftComment", async () => {
+      if (!activeReviewRequest) {
+        void vscode.window.showWarningMessage("No active review request. Run ARP: Check for Review Request first.");
+        return;
+      }
       const editor = vscode.window.activeTextEditor;
       const workspaceRoot = getWorkspaceRoot();
       if (!editor || !workspaceRoot) {
@@ -218,6 +220,8 @@ export function activate(context: vscode.ExtensionContext): void {
           );
 
           activeReviewRequest = null;
+          reviewCommentCodeLensProvider.setHasActiveSession(false);
+          reviewComments.setHasActiveSession(false);
           await reviewComments.refresh();
           await reviewFiles.refresh();
           await reviewOverview.refresh();
@@ -255,6 +259,8 @@ export function activate(context: vscode.ExtensionContext): void {
           );
 
           activeReviewRequest = null;
+          reviewCommentCodeLensProvider.setHasActiveSession(false);
+          reviewComments.setHasActiveSession(false);
           await reviewComments.refresh();
           await reviewFiles.refresh();
           await reviewOverview.refresh();
@@ -308,6 +314,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.addDraftCommentAtRange", async (uri: vscode.Uri, range: vscode.Range) => {
+      if (!activeReviewRequest) {
+        void vscode.window.showWarningMessage("No active review request.");
+        return;
+      }
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) {
         void vscode.window.showErrorMessage("Open a workspace first.");
@@ -331,6 +341,10 @@ export function activate(context: vscode.ExtensionContext): void {
       await openCommentInEditor(comment);
     }),
     vscode.commands.registerCommand("arp.createDraftComment", async (reply: vscode.CommentReply) => {
+      if (!activeReviewRequest) {
+        void vscode.window.showWarningMessage("No active review request. Run ARP: Check for Review Request first.");
+        return;
+      }
       const comment = await reviewComments.createOrReply(reply);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
@@ -488,6 +502,8 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         activeReviewRequest = null;
+        reviewCommentCodeLensProvider.setHasActiveSession(false);
+        reviewComments.setHasActiveSession(false);
         await reviewComments.refresh();
         await reviewFiles.refresh();
         await reviewOverview.refresh();
@@ -526,8 +542,8 @@ async function initializeReviewUi(
   }
 
   const hydrated = await hydrateReviewSessionState(workspaceRoot, busDbPath);
-  providers.reviewCommentCodeLensProvider.setHasActiveSession(Boolean(hydrated.session));
-  providers.reviewComments.setHasActiveSession(Boolean(hydrated.session));
+  providers.reviewCommentCodeLensProvider.setHasActiveSession(Boolean(activeReviewRequest));
+  providers.reviewComments.setHasActiveSession(Boolean(activeReviewRequest));
   await providers.reviewComments.setLatestResult(hydrated.latestResult);
   await providers.reviewFiles.setLatestResult(hydrated.latestResult);
   await providers.reviewOverview.setLatestResult(hydrated.latestResult);
