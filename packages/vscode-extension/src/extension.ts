@@ -19,6 +19,7 @@ import {
   REVIEW_EMPTY_SCHEME,
 } from "./review-files.js";
 import { ReviewOverviewProvider } from "./review-overview.js";
+import { ReviewStatusBar } from "./review-status-bar.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -34,12 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const reviewComments = new ReviewCommentsManager();
   const reviewFiles = new ReviewFilesProvider();
   const reviewOverview = new ReviewOverviewProvider();
+  const reviewStatusBar = new ReviewStatusBar();
   const reviewBaseContentProvider = new ReviewBaseContentProvider();
   context.subscriptions.push(
     outputChannel,
     reviewComments,
     reviewFiles,
     reviewOverview,
+    reviewStatusBar,
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_BASE_SCHEME, reviewBaseContentProvider),
     vscode.workspace.registerTextDocumentContentProvider(REVIEW_EMPTY_SCHEME, reviewBaseContentProvider),
     vscode.window.registerTreeDataProvider("arpReviewFiles", reviewFiles),
@@ -49,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
     reviewComments,
     reviewFiles,
     reviewOverview,
+    reviewStatusBar,
   });
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -56,6 +60,7 @@ export function activate(context: vscode.ExtensionContext): void {
         reviewComments,
         reviewFiles,
         reviewOverview,
+        reviewStatusBar,
       });
     }),
   );
@@ -79,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
           reviewComments,
           reviewFiles,
           reviewOverview,
+          reviewStatusBar,
         });
         const config = getExtensionConfig();
         const response = await sendJsonRpc(
@@ -137,6 +143,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewComments.refresh();
       await reviewFiles.refresh();
       await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
       void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
     }),
   );
@@ -171,6 +178,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewComments.refresh();
       await reviewFiles.refresh();
       await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
       void vscode.window.showInformationMessage("Cleared ARP draft comments.");
     }),
   );
@@ -267,6 +275,7 @@ export function activate(context: vscode.ExtensionContext): void {
               await reviewComments.applyRevisionResult(latest.result);
               await reviewFiles.applyRevisionResult(latest.result);
               await reviewOverview.applyRevisionResult(latest.result);
+              await reviewStatusBar.setLatestResult(latest.result);
               void vscode.window.showInformationMessage("ARP review result received.");
               await showReviewResult(
                 { result: latest.result },
@@ -330,6 +339,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await reviewComments.applyRevisionResult(latest.result);
         await reviewFiles.applyRevisionResult(latest.result);
         await reviewOverview.applyRevisionResult(latest.result);
+        await reviewStatusBar.setLatestResult(latest.result);
         await showReviewResult(
           { result: latest.result },
           "unknown",
@@ -347,6 +357,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewComments.createOrReply(reply);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
     }),
     vscode.commands.registerCommand("arp.editDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.edit(comment);
@@ -355,6 +366,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewComments.save(comment);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
     }),
     vscode.commands.registerCommand("arp.cancelEditDraftComment", async (comment: DraftReviewComment) => {
       reviewComments.cancel(comment);
@@ -363,6 +375,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await reviewComments.delete(comment);
       await reviewFiles.refresh();
       await reviewOverview.refresh();
+      await reviewStatusBar.refresh();
     }),
     vscode.commands.registerCommand("arp.openReviewFileDiff", async (node: ReviewFileNode) => {
       const workspaceRoot = getWorkspaceRoot();
@@ -419,11 +432,13 @@ async function initializeReviewUi(
     reviewComments: ReviewCommentsManager;
     reviewFiles: ReviewFilesProvider;
     reviewOverview: ReviewOverviewProvider;
+    reviewStatusBar: ReviewStatusBar;
   },
 ): Promise<void> {
   await providers.reviewComments.setWorkspaceRoot(workspaceRoot);
   await providers.reviewFiles.setWorkspaceRoot(workspaceRoot);
   await providers.reviewOverview.setWorkspaceRoot(workspaceRoot);
+  await providers.reviewStatusBar.setWorkspaceRoot(workspaceRoot);
 
   if (!workspaceRoot) {
     return;
@@ -433,6 +448,7 @@ async function initializeReviewUi(
   await providers.reviewComments.setLatestResult(hydrated.latestResult);
   await providers.reviewFiles.setLatestResult(hydrated.latestResult);
   await providers.reviewOverview.setLatestResult(hydrated.latestResult);
+  await providers.reviewStatusBar.setLatestResult(hydrated.latestResult);
 }
 
 function getWorkspaceRoot(): string | undefined {

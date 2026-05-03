@@ -31,6 +31,7 @@ Local prototype. This repo currently contains:
 - VS Code read path that loads the latest `revision.proposed` for the current session
 - active review overview sidebar with session, draft, file, and latest result summary plus quick actions
 - automatic hydration of latest review result from the bus on activation/workspace switch
+- status bar summary for the active review with one-click jump back into the flow
 - changed-files sidebar for the active review with diff opening against HEAD, draft counts, and result status summaries
 - latest revision results projected back onto inline draft comment threads
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
