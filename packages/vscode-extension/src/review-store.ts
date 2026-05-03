@@ -63,6 +63,7 @@ export async function addDraftComment(workspaceRoot: string, comment: Omit<Comme
     ...comment,
     id: `c_${randomUUID()}`,
     status: "draft",
+    iteration: store.reviewIteration ?? 1,
   };
 
   await saveReviewStore(workspaceRoot, {

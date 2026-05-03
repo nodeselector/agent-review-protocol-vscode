@@ -46,6 +46,7 @@ export interface Comment {
   category?: CommentCategory;
   scope?: CommentScope;
   status: CommentStatus;
+  iteration?: number;
 }
 
 export interface Review {

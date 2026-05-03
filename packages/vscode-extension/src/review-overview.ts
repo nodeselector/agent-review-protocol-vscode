@@ -265,30 +265,55 @@ function buildDraftCommentGroupNode(
 }
 
 function buildPreviousCommentsNode(comments: Comment[]): ReviewOverviewNode {
+  // Group by iteration
+  const byIteration = new Map<number, Comment[]>();
+  for (const comment of comments) {
+    const iter = comment.iteration ?? 0;
+    if (!byIteration.has(iter)) {
+      byIteration.set(iter, []);
+    }
+    byIteration.get(iter)!.push(comment);
+  }
+
+  const sortedIterations = [...byIteration.keys()].sort((a, b) => b - a);
+
   const root = new ReviewOverviewNode("Previous iterations", {
-    description: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+    description: `${sortedIterations.length} iteration${sortedIterations.length === 1 ? "" : "s"}`,
     icon: "history",
     collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
     children: [],
   });
 
-  const children = comments.map((comment) => {
-    const location = formatCommentLocation(comment);
-    const statusLabel = comment.status === "submitted" ? "submitted" : "outdated";
-    return new ReviewOverviewNode(truncate(comment.body), {
-      description: `${statusLabel} - ${comment.path}:${location}`,
-      tooltip: `${statusLabel}\n${comment.path}:${location}\n\n${comment.body}`,
-      command: {
-        command: "arp.openOverviewDraftComment",
-        title: "Open Comment",
-        arguments: [comment],
-      },
-      icon: comment.status === "submitted" ? "check" : "circle-slash",
+  const iterationNodes = sortedIterations.map((iter) => {
+    const iterComments = byIteration.get(iter)!;
+    const iterNode = new ReviewOverviewNode(`Iteration ${iter || "?"}`, {
+      description: `${iterComments.length} comment${iterComments.length === 1 ? "" : "s"}`,
+      icon: "git-commit",
+      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+      children: [],
       parent: root,
     });
+
+    iterNode.children = iterComments.map((comment) => {
+      const location = formatCommentLocation(comment);
+      const statusLabel = comment.status === "submitted" ? "submitted" : "outdated";
+      return new ReviewOverviewNode(truncate(comment.body), {
+        description: `${statusLabel} - ${comment.path}:${location}`,
+        tooltip: `${statusLabel}\n${comment.path}:${location}\n\n${comment.body}`,
+        command: {
+          command: "arp.openOverviewDraftComment",
+          title: "Open Comment",
+          arguments: [comment],
+        },
+        icon: comment.status === "submitted" ? "check" : "circle-slash",
+        parent: iterNode,
+      });
+    });
+
+    return iterNode;
   });
 
-  root.children = children;
+  root.children = iterationNodes;
   return root;
 }
 
