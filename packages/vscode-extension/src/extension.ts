@@ -112,7 +112,6 @@ export function activate(context: vscode.ExtensionContext): void {
         logJson("reviewRequest.auto", request);
         activeReviewRequest = request;
         await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
-        await ensureSession(workspaceRoot);
         await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
           reviewComments,
           reviewFiles,
@@ -514,7 +513,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
       activeReviewRequest = request;
       await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
-      await ensureSession(workspaceRoot);
       await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
         reviewComments,
         reviewFiles,
