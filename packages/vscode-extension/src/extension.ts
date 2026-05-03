@@ -187,7 +187,6 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const config = getExtensionConfig();
-      const session = await ensureSession(workspaceRoot);
       const store = await loadReviewStore(workspaceRoot);
       const activeDraftComments = getActiveDraftComments(store);
       if (activeDraftComments.length === 0) {
@@ -195,107 +194,82 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      let artifact;
-      try {
-        artifact = await captureGitDiffArtifact(workspaceRoot);
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Failed to capture git diff: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      // If there's an active review request from an agent, respond to it
+      if (activeReviewRequest) {
+        try {
+          const eventId = await submitReviewResponse(
+            workspaceRoot,
+            activeReviewRequest,
+            activeDraftComments,
+            `Review with ${activeDraftComments.length} comments`,
+            config.busDbPath || undefined,
+          );
+
+          await markDraftCommentsSubmitted(
+            workspaceRoot,
+            activeDraftComments.map((c) => c.id),
+          );
+
+          logLine(`Submitted review response: ${eventId} for request ${activeReviewRequest.requestId}`);
+          void vscode.window.showInformationMessage(
+            `Review submitted with ${activeDraftComments.length} comments. The agent will receive your feedback.`,
+          );
+
+          activeReviewRequest = null;
+          await reviewComments.refresh();
+          await reviewFiles.refresh();
+          await reviewOverview.refresh();
+          await reviewStatusBar.refresh();
+          reviewCommentCodeLensProvider.refresh();
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `Failed to submit review: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         return;
       }
 
-      if (!artifact.patch.trim() || artifact.changedFiles.length === 0) {
-        void vscode.window.showWarningMessage("Current git diff is empty. Make a change before submitting review.");
+      // No active review request -- check if there's one pending
+      const pendingRequest = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
+      if (pendingRequest) {
+        try {
+          activeReviewRequest = pendingRequest;
+          const eventId = await submitReviewResponse(
+            workspaceRoot,
+            pendingRequest,
+            activeDraftComments,
+            `Review with ${activeDraftComments.length} comments`,
+            config.busDbPath || undefined,
+          );
+
+          await markDraftCommentsSubmitted(
+            workspaceRoot,
+            activeDraftComments.map((c) => c.id),
+          );
+
+          logLine(`Submitted review response: ${eventId} for request ${pendingRequest.requestId}`);
+          void vscode.window.showInformationMessage(
+            `Review submitted with ${activeDraftComments.length} comments. The agent will receive your feedback.`,
+          );
+
+          activeReviewRequest = null;
+          await reviewComments.refresh();
+          await reviewFiles.refresh();
+          await reviewOverview.refresh();
+          await reviewStatusBar.refresh();
+          reviewCommentCodeLensProvider.refresh();
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `Failed to submit review: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         return;
       }
 
-      try {
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: "ARP review",
-            cancellable: false,
-          },
-          async (progress) => {
-            const busDbPath = config.busDbPath || undefined;
-            if (config.autoStartBusWorkerLoop) {
-              progress.report({ message: "starting worker loop" });
-              const worker = await ensureBusWorkerLoopRunning({
-                workspaceRoot,
-                dbPath: busDbPath ?? `${workspaceRoot}/.arp/bus/arp.db`,
-                command: config.busWorkerLoopCommand || undefined,
-                pollIntervalMs: config.busWorkerLoopPollIntervalMs,
-                onStdout: (line) => logLine(`busWorkerLoop.stdout ${line}`),
-                onStderr: (line) => logLine(`busWorkerLoop.stderr ${line}`),
-              });
-              logJson("busWorkerLoop", worker);
-              if (worker.status === "started") {
-                void vscode.window.showInformationMessage(`ARP worker started${worker.pid ? ` (pid ${worker.pid})` : ""}.`);
-              }
-            }
-
-            progress.report({ message: "capturing bus checkpoint" });
-            const afterSeq = await getCurrentBusEventSeq(workspaceRoot, busDbPath);
-
-            progress.report({ message: "queueing review" });
-            const result = await enqueueDraftReviewToBus({
-              workspaceRoot,
-              session,
-              artifact,
-              review: {
-                event: "comment",
-                summary: "Draft review from VS Code",
-                comments: activeDraftComments,
-              },
-              dbPath: busDbPath,
-            });
-
-            logJson("submitReviewToBus", result);
-            logLine(`queued review command ${result.commandId}`);
-
-            await markDraftCommentsSubmitted(
-              workspaceRoot,
-              activeDraftComments.map((comment) => comment.id),
-            );
-            await reviewComments.refresh();
-            await reviewFiles.refresh();
-            await reviewOverview.refresh();
-            await reviewStatusBar.refresh();
-            reviewCommentCodeLensProvider.refresh();
-
-            progress.report({ message: "waiting for review result" });
-            const latest = await waitForRevisionFromBus({
-              workspaceRoot,
-              sessionId: session.id,
-              commandId: result.commandId,
-              dbPath: result.dbPath,
-              afterSeq,
-              timeoutMs: config.busWaitTimeoutMs,
-              pollIntervalMs: config.busPollIntervalMs,
-            });
-
-            if (latest) {
-              logJson("submitReviewToBus.result", latest);
-              logLine(`received revision.proposed for ${result.commandId}`);
-              await reviewComments.applyRevisionResult(latest.result);
-              await reviewFiles.applyRevisionResult(latest.result);
-              await reviewOverview.applyRevisionResult(latest.result);
-              await reviewStatusBar.setLatestResult(latest.result);
-              void vscode.window.showInformationMessage("ARP review result received. Threads and overview updated.");
-              return;
-            }
-
-            logLine(`timed out waiting for revision.proposed for ${result.commandId}`);
-            void vscode.window.showWarningMessage(
-              "ARP review queued. No result arrived before the wait timeout.",
-            );
-          },
-        );
-      } catch (error) {
-        outputChannel.show(true);
-        void vscode.window.showErrorMessage(formatCommandError("submit review to bus", error));
-      }
+      // Fallback: no agent waiting, just show a message
+      void vscode.window.showWarningMessage(
+        "No agent is waiting for a review. Start a pi session with the ARP extension first.",
+      );
     }),
   );
 
