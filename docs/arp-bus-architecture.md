@@ -100,14 +100,11 @@ The VS Code side can now enqueue `review.submit` commands, and a tiny local work
 
 What is still missing:
 
-- long-running worker loop / daemon behavior
 - subscription-driven projection or read model for review state
 - replacing the direct RPC submit path as the default review UX
 - moving from bounded polling to a proper event-driven watcher
+- deciding how the persistent worker loop is launched and supervised in normal use
 
 ## Next implementation step
 
-Decide whether the next layer is:
-
-- a persistent local worker loop, or
-- an editor-side watcher/projection service that tails checkpoints continuously
+Teach the editor to manage or discover a long-lived local worker, or add a lightweight supervisor outside the editor.

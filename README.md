@@ -27,7 +27,7 @@ Local prototype. This repo currently contains:
 - reference server
 - VS Code command-driven review scaffold
 - optional bus-backed review submission path via local SQLite
-- local worker path that consumes `review.submit` and emits `revision.proposed`
+- local worker paths that consume `review.submit` and emit `revision.proposed`
 - VS Code read path that loads the latest `revision.proposed` for the current session
 - bounded wait path so bus submit can auto-open a result when the worker finishes in time
 - pi adapter with stub, fallback, and live-gated modes
@@ -85,6 +85,7 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 - `arp.busWaitTimeoutMs` - how long bus submit waits for a matching result before falling back to enqueue-only confirmation
 - `arp.busPollIntervalMs` - poll interval while waiting for a bus result
 - `scripts/arp-bus-worker --db /absolute/path/to/.arp/bus/arp.db` - process one queued review command
+- `scripts/arp-bus-worker-loop --db /absolute/path/to/.arp/bus/arp.db` - keep polling and process queued review commands until stopped
 
 ## Workspace layout
 

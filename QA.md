@@ -27,6 +27,7 @@ Current automated coverage includes:
 - review store tests
 - bus enqueue tests for `review.submit`
 - local worker tests for `review.submit` -> `revision.proposed`
+- persistent worker loop tests for idle stop, max iterations, and signal shutdown
 - VS Code bus read tests for latest session revision lookup
 - checkpointed wait tests for auto-opening bus results when they arrive in time
 - pi adapter prompt + normalization tests
@@ -114,6 +115,18 @@ scripts/arp-bus-worker --db /absolute/path/to/workspace/.arp/bus/arp.db
 
 3. Confirm the command reports `kind: "processed"`.
 4. Confirm a `revision.proposed` event exists in the SQLite bus.
+
+### Validate persistent local worker loop
+
+1. Start the loop in another terminal:
+
+```bash
+scripts/arp-bus-worker-loop --db /absolute/path/to/workspace/.arp/bus/arp.db --poll-ms 250
+```
+
+2. In the Extension Development Host, run `ARP: Submit Review to Bus`.
+3. Confirm the review result opens automatically if it arrives before the wait timeout.
+4. Stop the loop with `Ctrl-C` and confirm it exits cleanly.
 
 ### Validate bus revision read path
 

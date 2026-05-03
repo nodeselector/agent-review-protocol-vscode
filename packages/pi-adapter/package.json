@@ -6,7 +6,8 @@
   "types": "./dist/pi-adapter/src/index.d.ts",
   "bin": {
     "arp-pi-adapter": "./dist/pi-adapter/src/index.js",
-    "arp-bus-worker": "./dist/pi-adapter/src/bus-worker.js"
+    "arp-bus-worker": "./dist/pi-adapter/src/bus-worker.js",
+    "arp-bus-worker-loop": "./dist/pi-adapter/src/bus-worker-loop.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
