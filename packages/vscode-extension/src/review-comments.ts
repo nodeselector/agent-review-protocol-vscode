@@ -59,11 +59,12 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     }
 
     const store = await loadReviewStore(this.workspaceRoot);
+    const activeComments = store.comments.filter((c) => c.status === "draft");
     const resolutions = new Map(
       (this.latestResult?.revision.resolutions ?? []).map((resolution) => [resolution.commentId, resolution] as const),
     );
 
-    for (const comment of store.comments) {
+    for (const comment of activeComments) {
       const resolution = resolutions.get(comment.id);
       const comments: vscode.Comment[] = [new DraftReviewComment(comment)];
       if (resolution) {
