@@ -8,7 +8,7 @@ import {
   extractAssistantTextFromPiJson,
   invokePiForReview,
   normalizeAssistantTextToRevision,
-} from "../dist/pi-adapter/src/pi-client.js";
+} from "../packages/pi-adapter/dist/pi-adapter/src/pi-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

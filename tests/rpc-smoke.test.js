@@ -12,7 +12,7 @@ const sampleDiffPath = path.join(repoRoot, "tests/fixtures/sample-review.diff");
 
 test("reference server returns capabilities", async () => {
   const response = await runJsonRpc(
-    path.join(repoRoot, "dist/reference-server/src/index.js"),
+    path.join(repoRoot, "packages/reference-server/dist/reference-server/src/index.js"),
     {
       jsonrpc: "2.0",
       id: 1,
@@ -34,7 +34,7 @@ test("reference server returns capabilities", async () => {
 test("reference server returns stub revision for review submit", async () => {
   const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
   const response = await runJsonRpc(
-    path.join(repoRoot, "dist/reference-server/src/index.js"),
+    path.join(repoRoot, "packages/reference-server/dist/reference-server/src/index.js"),
     {
       jsonrpc: "2.0",
       id: 2,
@@ -87,7 +87,7 @@ test("reference server returns stub revision for review submit", async () => {
 test("pi adapter returns a stubbed response when live mode is disabled", async () => {
   const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
   const response = await runJsonRpc(
-    path.join(repoRoot, "dist/pi-adapter/src/index.js"),
+    path.join(repoRoot, "packages/pi-adapter/dist/pi-adapter/src/index.js"),
     {
       jsonrpc: "2.0",
       id: 3,
@@ -149,7 +149,7 @@ test("pi adapter returns a stubbed response when live mode is disabled", async (
 test("pi adapter returns fallback response when live invocation fails", async () => {
   const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
   const response = await runJsonRpc(
-    path.join(repoRoot, "dist/pi-adapter/src/index.js"),
+    path.join(repoRoot, "packages/pi-adapter/dist/pi-adapter/src/index.js"),
     {
       jsonrpc: "2.0",
       id: 4,

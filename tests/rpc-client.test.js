@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { sendJsonRpc } from "../dist/vscode-extension/src/rpc-client.js";
+import { sendJsonRpc } from "../packages/vscode-extension/dist/vscode-extension/src/rpc-client.js";
 
 class FakeReadable extends EventEmitter {}
 

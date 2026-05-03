@@ -7,7 +7,7 @@ import {
   createArtifactFromPatch,
   parseChangedFilesFromPatch,
   captureGitDiffArtifact,
-} from "../dist/vscode-extension/src/git-diff.js";
+} from "../packages/vscode-extension/dist/vscode-extension/src/git-diff.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -17,7 +17,7 @@
     "onCommand:arp.submitStubReview",
     "onCommand:arp.showOutput"
   ],
-  "main": "../../dist/vscode-extension/src/extension.js",
+  "main": "./dist/vscode-extension/src/extension.js",
   "contributes": {
     "commands": [
       {

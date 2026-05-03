@@ -2,10 +2,10 @@
   "name": "@arp/reference-server",
   "version": "0.0.1",
   "type": "module",
-  "main": "../../dist/reference-server/src/index.js",
-  "types": "../../dist/reference-server/src/index.d.ts",
+  "main": "./dist/reference-server/src/index.js",
+  "types": "./dist/reference-server/src/index.d.ts",
   "bin": {
-    "arp-reference-server": "../../dist/reference-server/src/index.js"
+    "arp-reference-server": "./dist/reference-server/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

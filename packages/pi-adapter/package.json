@@ -2,10 +2,10 @@
   "name": "@arp/pi-adapter",
   "version": "0.0.1",
   "type": "module",
-  "main": "../../dist/pi-adapter/src/index.js",
-  "types": "../../dist/pi-adapter/src/index.d.ts",
+  "main": "./dist/pi-adapter/src/index.js",
+  "types": "./dist/pi-adapter/src/index.d.ts",
   "bin": {
-    "arp-pi-adapter": "../../dist/pi-adapter/src/index.js"
+    "arp-pi-adapter": "./dist/pi-adapter/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

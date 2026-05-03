@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-exec node "$ROOT/dist/reference-server/src/index.js" "$@"
+exec node "$ROOT/packages/reference-server/dist/reference-server/src/index.js" "$@"

@@ -2,12 +2,12 @@
   "name": "@arp/protocol",
   "version": "0.0.1",
   "type": "module",
-  "main": "../../dist/protocol/src/index.js",
-  "types": "../../dist/protocol/src/index.d.ts",
+  "main": "./dist/protocol/src/index.js",
+  "types": "./dist/protocol/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "../../dist/protocol/src/index.d.ts",
-      "default": "../../dist/protocol/src/index.js"
+      "types": "./dist/protocol/src/index.d.ts",
+      "default": "./dist/protocol/src/index.js"
     }
   },
   "scripts": {

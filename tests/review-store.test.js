@@ -10,7 +10,7 @@ import {
   formatDraftComments,
   getStorePath,
   loadReviewStore,
-} from "../dist/vscode-extension/src/review-store.js";
+} from "../packages/vscode-extension/dist/vscode-extension/src/review-store.js";
 
 async function makeWorkspace() {
   return await fs.mkdtemp(path.join(os.tmpdir(), "arp-store-"));
