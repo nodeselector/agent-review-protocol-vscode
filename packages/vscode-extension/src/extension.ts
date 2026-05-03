@@ -106,6 +106,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      await reviewOverview.refresh();
       logJson("reviewRequest.auto", request);
       const action = await vscode.window.showInformationMessage(
         `Agent requested review (iteration ${request.iteration}): ${request.changedFiles.length} changed files. ${request.summary ?? ""}`,
