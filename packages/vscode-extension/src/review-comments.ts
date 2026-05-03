@@ -10,10 +10,8 @@ import {
 } from "./review-store.js";
 import { captureGitDiffArtifact, parseCommentingRangesFromPatch } from "./git-diff.js";
 import {
-  createReviewDocumentUri,
   getRelativePathFromReviewUri,
   isReviewDocumentUri,
-  parseReviewDocumentQuery,
   REVIEW_SCHEME_NAME,
 } from "./review-files.js";
 import type { AdapterReviewResult, Comment, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
@@ -29,6 +27,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
   private workspaceRoot?: string;
   private latestResult?: AdapterReviewResult;
   private hasActiveSession = false;
+  private changedFiles = new Set<string>();
 
   constructor() {
     this.controller = vscode.comments.createCommentController(COMMENT_CONTROLLER_ID, "ARP Review");
@@ -41,6 +40,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
 
   async setWorkspaceRoot(workspaceRoot: string | undefined): Promise<void> {
     this.workspaceRoot = workspaceRoot;
+    await this.refreshChangedFiles();
     await this.refresh();
   }
 
@@ -107,6 +107,16 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
         enableFileComments: ranges.length > 0,
         ranges,
       };
+    }
+
+    if (document.uri.scheme === "file" && this.changedFiles.has(relativePath)) {
+      const artifact = await captureGitDiffArtifact(this.workspaceRoot);
+      const ranges = parseCommentingRangesFromPatch(artifact.patch, relativePath).map(
+        (range) => new vscode.Range(range.startLine - 1, 0, range.endLine - 1, 0),
+      );
+      if (ranges.length > 0) {
+        return { enableFileComments: true, ranges };
+      }
     }
 
     const lastLine = Math.max(document.lineCount - 1, 0);
@@ -220,6 +230,21 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     this.controller.dispose();
   }
 
+  private async refreshChangedFiles(): Promise<void> {
+    this.changedFiles.clear();
+    if (!this.workspaceRoot) {
+      return;
+    }
+    try {
+      const artifact = await captureGitDiffArtifact(this.workspaceRoot);
+      for (const file of artifact.changedFiles) {
+        this.changedFiles.add(file.path);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   private clearThreads(): void {
     for (const thread of this.threads.values()) {
       thread.dispose();
@@ -305,14 +330,27 @@ function getRelativePathForUri(workspaceRoot: string, uri: vscode.Uri): string |
 }
 
 function createThreadUri(workspaceRoot: string, comment: Comment): vscode.Uri {
-  if ((comment.scope ?? "review") === "review") {
-    return createReviewDocumentUri(workspaceRoot, comment.path, "working");
-  }
   return vscode.Uri.file(path.join(workspaceRoot, comment.path));
 }
 
 function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
-  return isReviewDocumentUri(documentUri) && parseReviewDocumentQuery(documentUri).side === "working";
+  if (isReviewDocumentUri(documentUri)) {
+    return true;
+  }
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (!(tab.input instanceof vscode.TabInputTextDiff)) {
+        continue;
+      }
+      if (tab.input.modified.toString() !== documentUri.toString()) {
+        continue;
+      }
+      if (isReviewDocumentUri(tab.input.original)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function asPlainText(body: string | vscode.MarkdownString): string {

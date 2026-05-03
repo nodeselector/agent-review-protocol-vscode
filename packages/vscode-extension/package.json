@@ -18,6 +18,7 @@
   "categories": ["Other"],
   "activationEvents": [
     "onStartupFinished",
+    "onFileSystem:arp-review",
     "onCommand:arp.startSession",
     "onCommand:arp.addDraftComment",
     "onCommand:arp.showDraftComments",

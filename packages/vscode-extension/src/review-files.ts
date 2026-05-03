@@ -110,11 +110,14 @@ export class ReviewFileNode extends vscode.TreeItem {
 }
 
 export function createReviewDiffUris(workspaceRoot: string, file: ChangedFile): { left: vscode.Uri; right: vscode.Uri } {
+  const relativePath = file.path.replace(/\\/g, "/");
+  const workspaceUri = vscode.Uri.file(path.join(workspaceRoot, relativePath));
+
   switch (file.status) {
     case "added":
       return {
         left: createReviewDocumentUri(workspaceRoot, file.path, "empty"),
-        right: createReviewDocumentUri(workspaceRoot, file.path, "working"),
+        right: workspaceUri,
       };
     case "deleted":
       return {
@@ -124,7 +127,7 @@ export function createReviewDiffUris(workspaceRoot: string, file: ChangedFile): 
     default:
       return {
         left: createReviewDocumentUri(workspaceRoot, file.path, "base"),
-        right: createReviewDocumentUri(workspaceRoot, file.path, "working"),
+        right: workspaceUri,
       };
   }
 }
