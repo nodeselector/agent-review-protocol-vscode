@@ -67,6 +67,36 @@ export async function addDraftComment(workspaceRoot: string, comment: Omit<Comme
   return draft;
 }
 
+export async function updateDraftComment(
+  workspaceRoot: string,
+  commentId: string,
+  updates: Partial<Pick<Comment, "body" | "line" | "startLine" | "endLine" | "category">>,
+): Promise<Comment> {
+  const store = await loadReviewStore(workspaceRoot);
+  const index = store.comments.findIndex((comment) => comment.id === commentId);
+  if (index < 0) {
+    throw new Error(`draft comment not found: ${commentId}`);
+  }
+
+  const updated: Comment = {
+    ...store.comments[index],
+    ...updates,
+  };
+
+  const comments = [...store.comments];
+  comments[index] = updated;
+  await saveReviewStore(workspaceRoot, { ...store, comments });
+  return updated;
+}
+
+export async function removeDraftComment(workspaceRoot: string, commentId: string): Promise<void> {
+  const store = await loadReviewStore(workspaceRoot);
+  await saveReviewStore(workspaceRoot, {
+    ...store,
+    comments: store.comments.filter((comment) => comment.id !== commentId),
+  });
+}
+
 export async function clearDraftComments(workspaceRoot: string): Promise<void> {
   const store = await loadReviewStore(workspaceRoot);
   await saveReviewStore(workspaceRoot, {

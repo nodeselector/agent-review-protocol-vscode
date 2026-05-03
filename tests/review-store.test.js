@@ -10,6 +10,8 @@ import {
   formatDraftComments,
   getStorePath,
   loadReviewStore,
+  removeDraftComment,
+  updateDraftComment,
 } from "../packages/vscode-extension/dist/vscode-extension/src/review-store.js";
 
 async function makeWorkspace() {
@@ -43,6 +45,40 @@ test("addDraftComment appends draft comments to the store", async () => {
   assert.equal(comment.status, "draft");
   assert.equal(store.comments.length, 1);
   assert.equal(store.comments[0]?.body, "Preserve root slash semantics.");
+});
+
+test("updateDraftComment updates an existing draft", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const comment = await addDraftComment(workspaceRoot, {
+    path: "src/fs.ts",
+    side: "new",
+    line: 84,
+    body: "Preserve root slash semantics.",
+    category: "blocking",
+  });
+
+  const updated = await updateDraftComment(workspaceRoot, comment.id, {
+    body: "Preserve root slash semantics carefully.",
+    category: "note",
+  });
+
+  assert.equal(updated.body, "Preserve root slash semantics carefully.");
+  assert.equal(updated.category, "note");
+});
+
+test("removeDraftComment removes one draft comment", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const comment = await addDraftComment(workspaceRoot, {
+    path: "src/fs.ts",
+    side: "new",
+    line: 84,
+    body: "Preserve root slash semantics.",
+    category: "blocking",
+  });
+
+  await removeDraftComment(workspaceRoot, comment.id);
+  const store = await loadReviewStore(workspaceRoot);
+  assert.equal(store.comments.length, 0);
 });
 
 test("clearDraftComments removes all draft comments", async () => {

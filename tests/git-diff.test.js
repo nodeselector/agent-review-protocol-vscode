@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   createArtifactFromPatch,
   parseChangedFilesFromPatch,
+  parseCommentingRangesFromPatch,
   captureGitDiffArtifact,
 } from "../packages/vscode-extension/dist/vscode-extension/src/git-diff.js";
 
@@ -34,6 +35,13 @@ test("createArtifactFromPatch includes patch and changed files", async () => {
   assert.equal(artifact.patch, sampleDiff);
   assert.equal(artifact.changedFiles.length, 1);
   assert.equal(artifact.changedFiles[0]?.path, "src/fs.ts");
+});
+
+test("parseCommentingRangesFromPatch returns new-side hunk ranges for a file", async () => {
+  const sampleDiff = await fs.readFile(sampleDiffPath, "utf8");
+  const ranges = parseCommentingRangesFromPatch(sampleDiff, "src/fs.ts");
+
+  assert.deepEqual(ranges, [{ startLine: 81, endLine: 96 }]);
 });
 
 test("captureGitDiffArtifact delegates to git and returns artifact", async () => {

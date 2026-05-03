@@ -10,6 +10,7 @@
   },
   "categories": ["Other"],
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:arp.startSession",
     "onCommand:arp.addDraftComment",
     "onCommand:arp.showDraftComments",
@@ -48,6 +49,26 @@
       {
         "command": "arp.showOutput",
         "title": "ARP: Show Output"
+      },
+      {
+        "command": "arp.createDraftComment",
+        "title": "ARP: Create Draft Comment"
+      },
+      {
+        "command": "arp.editDraftComment",
+        "title": "ARP: Edit Draft Comment"
+      },
+      {
+        "command": "arp.saveDraftComment",
+        "title": "ARP: Save Draft Comment"
+      },
+      {
+        "command": "arp.cancelEditDraftComment",
+        "title": "ARP: Cancel Draft Comment Edit"
+      },
+      {
+        "command": "arp.deleteDraftComment",
+        "title": "ARP: Delete Draft Comment"
       }
     ],
     "configuration": {
@@ -98,6 +119,39 @@
           "description": "Polling interval passed to the persistent ARP bus worker loop."
         }
       }
+    },
+    "menus": {
+      "comments/commentThread/context": [
+        {
+          "command": "arp.createDraftComment",
+          "group": "inline@1",
+          "when": "commentController == arp-review"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "arp.editDraftComment",
+          "group": "inline@1",
+          "when": "commentController == arp-review && comment == arp-draft-comment"
+        },
+        {
+          "command": "arp.deleteDraftComment",
+          "group": "inline@2",
+          "when": "commentController == arp-review && comment == arp-draft-comment"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "arp.saveDraftComment",
+          "group": "inline@1",
+          "when": "commentController == arp-review && comment == arp-draft-comment"
+        },
+        {
+          "command": "arp.cancelEditDraftComment",
+          "group": "inline@2",
+          "when": "commentController == arp-review && comment == arp-draft-comment"
+        }
+      ]
     }
   },
   "scripts": {

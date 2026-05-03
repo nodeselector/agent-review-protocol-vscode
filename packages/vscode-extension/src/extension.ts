@@ -9,6 +9,7 @@ import {
   waitForRevisionFromBus,
 } from "./bus-review.js";
 import { ensureBusWorkerLoopRunning, stopBusWorkerLoop } from "./worker-manager.js";
+import { ReviewCommentsManager, DraftReviewComment } from "./review-comments.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -20,7 +21,14 @@ import {
 const outputChannel = vscode.window.createOutputChannel("ARP");
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(outputChannel);
+  const reviewComments = new ReviewCommentsManager();
+  context.subscriptions.push(outputChannel, reviewComments);
+  void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
+    }),
+  );
   context.subscriptions.push({
     dispose: () => {
       void stopBusWorkerLoop();
@@ -37,6 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const localSession = await ensureSession(workspaceRoot);
+        await reviewComments.setWorkspaceRoot(workspaceRoot);
         const config = getExtensionConfig();
         const response = await sendJsonRpc(
           config.referenceServerCommand,
@@ -91,6 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
         category,
       });
 
+      await reviewComments.refresh();
       void vscode.window.showInformationMessage(`Draft comment added: ${comment.path}:${comment.line}`);
     }),
   );
@@ -122,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       await clearDraftComments(workspaceRoot);
+      await reviewComments.refresh();
       void vscode.window.showInformationMessage("Cleared ARP draft comments.");
     }),
   );
@@ -284,6 +295,24 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.show(true);
         void vscode.window.showErrorMessage(formatCommandError("show latest bus revision", error));
       }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("arp.createDraftComment", async (reply: vscode.CommentReply) => {
+      await reviewComments.createOrReply(reply);
+    }),
+    vscode.commands.registerCommand("arp.editDraftComment", async (comment: DraftReviewComment) => {
+      reviewComments.edit(comment);
+    }),
+    vscode.commands.registerCommand("arp.saveDraftComment", async (comment: DraftReviewComment) => {
+      await reviewComments.save(comment);
+    }),
+    vscode.commands.registerCommand("arp.cancelEditDraftComment", async (comment: DraftReviewComment) => {
+      reviewComments.cancel(comment);
+    }),
+    vscode.commands.registerCommand("arp.deleteDraftComment", async (comment: DraftReviewComment) => {
+      await reviewComments.delete(comment);
     }),
   );
 

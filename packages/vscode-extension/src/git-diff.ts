@@ -37,6 +37,11 @@ export function createArtifactFromPatch(patch: string): Artifact {
   };
 }
 
+export interface PatchLineRange {
+  startLine: number;
+  endLine: number;
+}
+
 export function parseChangedFilesFromPatch(patch: string): ChangedFile[] {
   const lines = patch.split("\n");
   const changedFiles: ChangedFile[] = [];
@@ -61,6 +66,42 @@ export function parseChangedFilesFromPatch(patch: string): ChangedFile[] {
   }
 
   return changedFiles;
+}
+
+export function parseCommentingRangesFromPatch(patch: string, targetPath: string): PatchLineRange[] {
+  const lines = patch.split("\n");
+  const ranges: PatchLineRange[] = [];
+  let inTargetFile = false;
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git a/")) {
+      const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
+      inTargetFile = Boolean(match && inferPath(match[1], match[2]) === targetPath);
+      continue;
+    }
+
+    if (!inTargetFile || !line.startsWith("@@ ")) {
+      continue;
+    }
+
+    const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (!match) {
+      continue;
+    }
+
+    const startLine = Number(match[1]);
+    const lineCount = Number(match[2] ?? "1");
+    if (lineCount <= 0) {
+      continue;
+    }
+
+    ranges.push({
+      startLine,
+      endLine: startLine + lineCount - 1,
+    });
+  }
+
+  return ranges;
 }
 
 function inferPath(oldPath: string, newPath: string): string {
