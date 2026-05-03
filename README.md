@@ -8,6 +8,7 @@ VS Code extension and reference implementation for the Agent Review Protocol.
 - `packages/pi-adapter` - pi-specific adapter for ARP
 - `packages/reference-server` - reference JSON-RPC server for ARP over stdio
 - `packages/protocol` - shared protocol types and message helpers
+- `packages/arp-domain` - datastore-agnostic ARP bus domain contracts
 
 ## Goals
 
@@ -27,6 +28,7 @@ Local prototype. This repo currently contains:
 - pi adapter with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
+- initial ARP bus domain interfaces, invariants, and adapter boundary docs
 
 ## Development
 
@@ -44,6 +46,9 @@ pnpm qa:manual
 ```
 
 See [`QA.md`](QA.md) for safe, stub-mode, and live-mode validation tiers.
+
+See [`docs/arp-bus-architecture.md`](docs/arp-bus-architecture.md) for the datastore-agnostic bus model.
+
 
 ## Quick local test
 
@@ -73,6 +78,7 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 
 ```text
 packages/
+  arp-domain/
   protocol/
   reference-server/
   pi-adapter/
