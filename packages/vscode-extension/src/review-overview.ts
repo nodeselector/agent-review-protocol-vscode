@@ -1,11 +1,14 @@
 import * as vscode from "vscode";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import { getActiveDraftComments, loadReviewStore, type ReviewStore } from "./review-store.js";
+import { getActiveDraftComments, getCommentsFromPreviousIterations, loadReviewStore, type ReviewStore } from "./review-store.js";
 import type { AdapterReviewResult, Comment, ResolutionStatus, Session } from "../../protocol/src/index.js";
 
 export interface ReviewOverviewState {
   session?: Session;
+  reviewSessionId?: string;
+  reviewIteration?: number;
   draftComments: Comment[];
+  previousComments: Comment[];
   changedFileCount: number;
   latestResult?: AdapterReviewResult;
 }
@@ -16,6 +19,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
   private workspaceRoot?: string;
   private state: ReviewOverviewState = {
     draftComments: [],
+    previousComments: [],
     changedFileCount: 0,
   };
   private nodes: ReviewOverviewNode[] = [];
@@ -35,7 +39,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
 
   async refresh(): Promise<void> {
     if (!this.workspaceRoot) {
-      this.state = { draftComments: [], changedFileCount: 0 };
+      this.state = { draftComments: [], previousComments: [], changedFileCount: 0 };
       this.rebuildNodes();
       return;
     }
@@ -45,7 +49,10 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
     this.state = {
       ...this.state,
       session: store.session,
+      reviewSessionId: store.reviewSessionId,
+      reviewIteration: store.reviewIteration,
       draftComments: sortDraftComments(getActiveDraftComments(store)),
+      previousComments: getCommentsFromPreviousIterations(store),
       changedFileCount,
     };
     this.rebuildNodes();
@@ -132,15 +139,28 @@ export class ReviewOverviewNode extends vscode.TreeItem {
 function buildOverviewNodes(state: ReviewOverviewState): ReviewOverviewNode[] {
   const nodes: ReviewOverviewNode[] = [];
 
-  nodes.push(
-    new ReviewOverviewNode("Session", {
-      description: state.session?.id ?? "not started",
-      command: { command: "arp.startSession", title: "Start Session" },
-      icon: "history",
-    }),
-  );
+  if (state.reviewSessionId) {
+    nodes.push(
+      new ReviewOverviewNode("Review session", {
+        description: `iteration ${state.reviewIteration ?? 1}`,
+        icon: "git-pull-request",
+      }),
+    );
+  } else {
+    nodes.push(
+      new ReviewOverviewNode("Session", {
+        description: state.session?.id ?? "not started",
+        command: { command: "arp.startSession", title: "Start Session" },
+        icon: "history",
+      }),
+    );
+  }
 
   nodes.push(buildDraftCommentsNode(state.draftComments));
+
+  if (state.previousComments.length > 0) {
+    nodes.push(buildPreviousCommentsNode(state.previousComments));
+  }
 
   nodes.push(
     new ReviewOverviewNode("Changed files", {
@@ -242,6 +262,34 @@ function buildDraftCommentGroupNode(
 
   group.children = children;
   return group;
+}
+
+function buildPreviousCommentsNode(comments: Comment[]): ReviewOverviewNode {
+  const root = new ReviewOverviewNode("Previous iterations", {
+    description: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+    icon: "history",
+    collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+    children: [],
+  });
+
+  const children = comments.map((comment) => {
+    const location = formatCommentLocation(comment);
+    const statusLabel = comment.status === "submitted" ? "submitted" : "outdated";
+    return new ReviewOverviewNode(truncate(comment.body), {
+      description: `${statusLabel} - ${comment.path}:${location}`,
+      tooltip: `${statusLabel}\n${comment.path}:${location}\n\n${comment.body}`,
+      command: {
+        command: "arp.openOverviewDraftComment",
+        title: "Open Comment",
+        arguments: [comment],
+      },
+      icon: comment.status === "submitted" ? "check" : "circle-slash",
+      parent: root,
+    });
+  });
+
+  root.children = children;
+  return root;
 }
 
 function sortDraftComments(comments: Comment[]): Comment[] {
