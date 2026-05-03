@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Start pi with the ARP review extension.
+# The extension polls the bus and processes review commands using the LLM.
+#
+# Usage:
+#   scripts/arp-pi-review --db /path/to/.arp/bus/arp.db
+#
+# Environment:
+#   ARP_BUS_DB_PATH - path to the SQLite bus database
+#   ARP_POLL_INTERVAL_MS - poll interval in ms (default: 2000)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+EXTENSION_PATH="$REPO_ROOT/packages/pi-extension/arp-review-extension.ts"
+
+# Parse --db flag
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --db)
+      export ARP_BUS_DB_PATH="$2"
+      shift 2
+      ;;
+    --poll-ms)
+      export ARP_POLL_INTERVAL_MS="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${ARP_BUS_DB_PATH:-}" ]]; then
+  echo "Error: --db <path> or ARP_BUS_DB_PATH required" >&2
+  exit 1
+fi
+
+exec pi -e "$EXTENSION_PATH" --no-session
