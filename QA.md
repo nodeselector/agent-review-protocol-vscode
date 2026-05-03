@@ -37,7 +37,15 @@ This is the default manual path.
 
 - `pnpm install`
 - `pnpm build`
-- `PATH` includes the repo root `node_modules/.bin`
+- build local wrappers:
+
+```bash
+chmod +x scripts/arp-reference-server scripts/arp-pi-adapter
+```
+
+- configure VS Code settings to point at:
+  - `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-reference-server`
+  - `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-pi-adapter`
 - export safe adapter mode:
 
 ```bash
@@ -128,8 +136,8 @@ A fallback result is acceptable for QA at this stage. A hang is not.
 - no workspace open
 - no active editor
 - empty git diff
-- `arp-reference-server` not found on `PATH`
-- `arp-pi-adapter` not found on `PATH`
+- wrapper script path is wrong or not executable
+- `node` is unavailable to the wrapper script
 - live adapter timeout
 - JSON result opens, but `mode: "fallback"`
 
