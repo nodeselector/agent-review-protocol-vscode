@@ -9,6 +9,7 @@ VS Code extension and reference implementation for the Agent Review Protocol.
 - `packages/reference-server` - reference JSON-RPC server for ARP over stdio
 - `packages/protocol` - shared protocol types and message helpers
 - `packages/arp-domain` - datastore-agnostic ARP bus domain contracts
+- `packages/arp-store-sqlite` - first concrete durable transport adapter using SQLite
 
 ## Goals
 
@@ -29,6 +30,7 @@ Local prototype. This repo currently contains:
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
 - initial ARP bus domain interfaces, invariants, and adapter boundary docs
+- first SQLite-backed ARP bus adapter behind repository contracts
 
 ## Development
 
@@ -79,6 +81,7 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 ```text
 packages/
   arp-domain/
+  arp-store-sqlite/
   protocol/
   reference-server/
   pi-adapter/

@@ -1,13 +1,13 @@
 {
-  "name": "@arp/domain",
+  "name": "@arp/store-sqlite",
   "version": "0.0.1",
   "type": "module",
-  "main": "./dist/arp-domain/src/index.js",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./dist/arp-domain/src/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -15,5 +15,8 @@
     "clean": "rm -rf dist",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@arp/domain": "workspace:*"
   }
 }

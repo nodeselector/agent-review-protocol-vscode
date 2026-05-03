@@ -84,6 +84,20 @@ The bus may retain messages and events only as long as needed for delivery and r
 
 Long-term persistence should be handled by hook consumers, not the bus itself.
 
+## Current implementation status
+
+A first concrete SQLite adapter now exists in `packages/arp-store-sqlite`.
+
+It currently implements:
+
+- workspace/session persistence
+- command enqueue/claim/requeue
+- event append/read
+- checkpoint advancement
+- bus-level atomic complete/fail with emitted events
+
+It is intentionally not wired into the VS Code or pi worker flow yet.
+
 ## Next implementation step
 
-Build a concrete SQLite adapter behind these interfaces before changing the VS Code or pi worker flow to depend on it.
+Switch the current extension and worker paths from ad hoc local state to the bus service boundary.
