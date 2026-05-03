@@ -78,8 +78,62 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({
     dispose: () => {
       void stopBusWorkerLoop();
+      if (reviewRequestPollTimer) {
+        clearInterval(reviewRequestPollTimer);
+      }
     },
   });
+
+  // Auto-poll for review requests from agents
+  let reviewRequestPollTimer: ReturnType<typeof setInterval> | undefined;
+  function startReviewRequestPolling() {
+    if (reviewRequestPollTimer) {
+      return;
+    }
+    const pollMs = 3000;
+    reviewRequestPollTimer = setInterval(async () => {
+      if (activeReviewRequest) {
+        return;
+      }
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        return;
+      }
+      const config = getExtensionConfig();
+      const request = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
+      if (!request) {
+        return;
+      }
+
+      logJson("reviewRequest.auto", request);
+      const action = await vscode.window.showInformationMessage(
+        `Agent requested review (iteration ${request.iteration}): ${request.changedFiles.length} changed files. ${request.summary ?? ""}`,
+        "Open Review",
+        "Dismiss",
+      );
+
+      if (action !== "Open Review") {
+        return;
+      }
+
+      activeReviewRequest = request;
+      await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
+      await ensureSession(workspaceRoot);
+      await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
+        reviewComments,
+        reviewFiles,
+        reviewOverview,
+        reviewStatusBar,
+        reviewCommentCodeLensProvider,
+      });
+      reviewCommentCodeLensProvider.setHasActiveSession(true);
+      reviewComments.setHasActiveSession(true);
+      void vscode.window.showInformationMessage(
+        `Review iteration ${request.iteration} started for ${request.changedFiles.length} files. Add your comments and submit.`,
+      );
+    }, pollMs);
+  }
+  startReviewRequestPolling();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.startSession", async () => {
@@ -457,18 +511,6 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       reviewCommentCodeLensProvider.setHasActiveSession(true);
       reviewComments.setHasActiveSession(true);
-
-      // Auto-open the first changed file diff so commenting ranges are active
-      const firstFile = reviewFiles.getFirstPendingFile();
-      if (firstFile) {
-        const { left, right } = createReviewDiffUris(workspaceRoot, firstFile.file);
-        await vscode.commands.executeCommand(
-          "vscode.diff",
-          left,
-          right,
-          `${firstFile.file.path} (ARP Review)`,
-        );
-      }
 
       void vscode.window.showInformationMessage(
         `Review iteration ${request.iteration} started for ${request.changedFiles.length} files. Add your comments and submit.`,
