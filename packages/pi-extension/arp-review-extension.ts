@@ -347,10 +347,12 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     busDbPath = process.env.ARP_BUS_DB_PATH;
-    if (busDbPath) {
-      ensureSchema(busDbPath);
-      ctx.ui.notify("ARP: review tool available", "info");
+    if (!busDbPath) {
+      const path = require("node:path");
+      busDbPath = path.join(ctx.cwd, ".arp", "bus", "arp.db");
     }
+    ensureSchema(busDbPath);
+    ctx.ui.notify(`ARP: review tool ready -- bus at ${busDbPath}`, "info");
   });
 
   pi.on("session_shutdown", async () => {
