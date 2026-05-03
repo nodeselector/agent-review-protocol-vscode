@@ -24,6 +24,14 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
     await this.refresh();
   }
 
+  async setLatestResult(result: AdapterReviewResult | undefined): Promise<void> {
+    this.state = {
+      ...this.state,
+      latestResult: result,
+    };
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
   async refresh(): Promise<void> {
     if (!this.workspaceRoot) {
       this.state = { draftCommentCount: 0, changedFileCount: 0 };
@@ -43,11 +51,7 @@ export class ReviewOverviewProvider implements vscode.TreeDataProvider<ReviewOve
   }
 
   async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
-    this.state = {
-      ...this.state,
-      latestResult: result,
-    };
-    this.onDidChangeTreeDataEmitter.fire(undefined);
+    await this.setLatestResult(result);
   }
 
   getTreeItem(element: ReviewOverviewNode): vscode.TreeItem {

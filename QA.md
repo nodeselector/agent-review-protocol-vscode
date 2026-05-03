@@ -88,6 +88,7 @@ export ARP_PI_ADAPTER_DISABLE_LIVE=1
    - changed file count
    - latest result summary
 2. Use the overview actions to start a session or submit a review.
+3. Reload the extension host or switch workspaces and confirm the latest review result rehydrates into the overview, files view, and inline thread annotations.
 
 ### Validate review files sidebar
 

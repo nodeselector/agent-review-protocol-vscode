@@ -26,6 +26,7 @@ import {
   formatDraftComments,
   loadReviewStore,
 } from "./review-store.js";
+import { hydrateReviewSessionState } from "./review-session.js";
 
 const outputChannel = vscode.window.createOutputChannel("ARP");
 
@@ -44,14 +45,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider("arpReviewFiles", reviewFiles),
     vscode.window.registerTreeDataProvider("arpReviewOverview", reviewOverview),
   );
-  void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
-  void reviewFiles.setWorkspaceRoot(getWorkspaceRoot());
-  void reviewOverview.setWorkspaceRoot(getWorkspaceRoot());
+  void initializeReviewUi(getWorkspaceRoot(), getExtensionConfig().busDbPath || undefined, {
+    reviewComments,
+    reviewFiles,
+    reviewOverview,
+  });
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      void reviewComments.setWorkspaceRoot(getWorkspaceRoot());
-      void reviewFiles.setWorkspaceRoot(getWorkspaceRoot());
-      void reviewOverview.setWorkspaceRoot(getWorkspaceRoot());
+      void initializeReviewUi(getWorkspaceRoot(), getExtensionConfig().busDbPath || undefined, {
+        reviewComments,
+        reviewFiles,
+        reviewOverview,
+      });
     }),
   );
   context.subscriptions.push({
@@ -70,9 +75,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const localSession = await ensureSession(workspaceRoot);
-        await reviewComments.setWorkspaceRoot(workspaceRoot);
-        await reviewFiles.setWorkspaceRoot(workspaceRoot);
-        await reviewOverview.setWorkspaceRoot(workspaceRoot);
+        await initializeReviewUi(workspaceRoot, getExtensionConfig().busDbPath || undefined, {
+          reviewComments,
+          reviewFiles,
+          reviewOverview,
+        });
         const config = getExtensionConfig();
         const response = await sendJsonRpc(
           config.referenceServerCommand,
@@ -382,6 +389,29 @@ export function activate(context: vscode.ExtensionContext): void {
       outputChannel.show(true);
     }),
   );
+}
+
+async function initializeReviewUi(
+  workspaceRoot: string | undefined,
+  busDbPath: string | undefined,
+  providers: {
+    reviewComments: ReviewCommentsManager;
+    reviewFiles: ReviewFilesProvider;
+    reviewOverview: ReviewOverviewProvider;
+  },
+): Promise<void> {
+  await providers.reviewComments.setWorkspaceRoot(workspaceRoot);
+  await providers.reviewFiles.setWorkspaceRoot(workspaceRoot);
+  await providers.reviewOverview.setWorkspaceRoot(workspaceRoot);
+
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const hydrated = await hydrateReviewSessionState(workspaceRoot, busDbPath);
+  await providers.reviewComments.setLatestResult(hydrated.latestResult);
+  await providers.reviewFiles.setLatestResult(hydrated.latestResult);
+  await providers.reviewOverview.setLatestResult(hydrated.latestResult);
 }
 
 function getWorkspaceRoot(): string | undefined {

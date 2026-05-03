@@ -35,6 +35,11 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     await this.refresh();
   }
 
+  async setLatestResult(result: AdapterReviewResult | undefined): Promise<void> {
+    this.latestResult = result;
+    await this.refresh();
+  }
+
   async refresh(): Promise<void> {
     this.clearThreads();
     if (!this.workspaceRoot) {
@@ -181,8 +186,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
   }
 
   async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
-    this.latestResult = result;
-    await this.refresh();
+    await this.setLatestResult(result);
   }
 
   dispose(): void {

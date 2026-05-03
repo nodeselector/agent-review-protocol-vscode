@@ -22,6 +22,11 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
     await this.refresh();
   }
 
+  async setLatestResult(result: AdapterReviewResult | undefined): Promise<void> {
+    this.latestResult = result;
+    await this.refresh();
+  }
+
   async refresh(): Promise<void> {
     if (!this.workspaceRoot) {
       this.files = [];
@@ -59,8 +64,7 @@ export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNo
   }
 
   async applyRevisionResult(result: AdapterReviewResult | undefined): Promise<void> {
-    this.latestResult = result;
-    await this.refresh();
+    await this.setLatestResult(result);
   }
 
   dispose(): void {
