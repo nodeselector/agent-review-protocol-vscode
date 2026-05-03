@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 import * as vscode from "vscode";
@@ -107,32 +106,6 @@ export class ReviewFileNode extends vscode.TreeItem {
       arguments: [this],
     };
     this.iconPath = new vscode.ThemeIcon(iconForStatus(file.status));
-  }
-}
-
-export class ReviewContentProvider implements vscode.TextDocumentContentProvider {
-  async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    const query = parseReviewDocumentQuery(uri);
-    if (query.side === "empty") {
-      return "";
-    }
-
-    const workspaceRoot = uri.authority;
-    const filePath = getRelativePathFromReviewUri(uri);
-
-    try {
-      if (query.side === "base") {
-        const { stdout } = await execFileAsync("git", ["show", `HEAD:${filePath}`], {
-          cwd: workspaceRoot,
-          maxBuffer: 10 * 1024 * 1024,
-        });
-        return stdout;
-      }
-
-      return await fs.readFile(path.join(workspaceRoot, filePath), "utf8");
-    } catch {
-      return "";
-    }
   }
 }
 
