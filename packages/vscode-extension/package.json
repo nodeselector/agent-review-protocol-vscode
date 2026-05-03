@@ -5,15 +5,8 @@
   "version": "0.0.1",
   "type": "module",
   "publisher": "nodeselector",
-  "enabledApiProposals": [
-    "commentingRangeHint",
-    "commentReveal",
-    "commentThreadApplicability",
-    "commentReplyAuthor",
-    "fileComments"
-  ],
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.90.0"
   },
   "categories": ["Other"],
   "activationEvents": [
