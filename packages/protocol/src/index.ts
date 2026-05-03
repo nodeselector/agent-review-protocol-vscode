@@ -127,6 +127,26 @@ export interface ReviewSubmitCommandPayload {
   workspaceRoot: string;
 }
 
+export interface ReviewRequestedEventPayload {
+  requestId: string;
+  sessionId: string;
+  workspaceRoot: string;
+  artifact: Artifact;
+  summary?: string;
+  requestedAt: string;
+}
+
+export interface ReviewResponseEventPayload {
+  requestId: string;
+  sessionId: string;
+  review: {
+    event: ReviewEvent;
+    summary?: string;
+    comments: Comment[];
+  };
+  respondedAt: string;
+}
+
 export interface AdapterReviewResult {
   adapter: string;
   mode: "stub" | "live" | "fallback";

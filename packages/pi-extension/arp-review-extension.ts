@@ -1,48 +1,25 @@
 /**
  * ARP Review Extension for pi
  *
- * Polls the local ARP SQLite bus for review.submit commands,
- * injects the diff + comments as context for the LLM,
- * and writes revision.proposed events back to the bus.
+ * Gives the coding agent a `request_review` tool.
+ * When called, it:
+ *   1. Captures the current git diff
+ *   2. Writes a `review.requested` event to the ARP bus
+ *   3. Blocks waiting for a `review.response` event from the human reviewer (VS Code)
+ *   4. Returns the human's review comments to the agent
  *
- * Usage:
- *   pi -e /path/to/arp-review-extension.ts
+ * The agent can then act on the feedback.
  *
  * Environment:
  *   ARP_BUS_DB_PATH - path to the SQLite bus database (required)
- *   ARP_POLL_INTERVAL_MS - poll interval in ms (default: 2000)
+ *   ARP_REVIEW_POLL_MS - poll interval while waiting for review (default: 2000)
+ *   ARP_REVIEW_TIMEOUT_MS - max wait time for review (default: 600000 = 10min)
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {
-  let pendingReview: PendingReview | null = null;
   let busDbPath: string | undefined;
-
-  interface PendingReview {
-    commandId: string;
-    sessionId: string;
-    workspaceId: string;
-    workspaceRoot: string;
-    artifact: {
-      patch: string;
-      changedFiles: Array<{ path: string; status: string }>;
-    };
-    review: {
-      event: string;
-      summary?: string;
-      comments: Array<{
-        id: string;
-        path: string;
-        line?: number;
-        startLine?: number;
-        endLine?: number;
-        body: string;
-        category?: string;
-        scope?: string;
-      }>;
-    };
-  }
 
   // -- Bus helpers (inline to avoid import issues in pi's jiti loader) --
 
@@ -57,76 +34,123 @@ export default function (pi: ExtensionAPI) {
     return db;
   }
 
-  function claimNextReviewCommand(dbPath: string): PendingReview | null {
+  function ensureSchema(dbPath: string) {
     const db = openDb(dbPath);
     try {
-      const workerId = `pi-ext-${process.pid}`;
-      const now = new Date().toISOString();
-      const leaseUntil = new Date(Date.now() + 300_000).toISOString();
-
-      // Requeue expired
-      db.exec(`UPDATE commands SET status = 'pending', claimed_by = NULL, lease_until = NULL WHERE status = 'claimed' AND lease_until < '${now}'`);
-
-      const row = db.prepare(
-        `SELECT id, workspace_id, session_id, type, payload FROM commands WHERE status = 'pending' AND type = 'review.submit' ORDER BY created_at ASC LIMIT 1`
-      ).get() as any;
-
-      if (!row) return null;
-
-      db.prepare(
-        `UPDATE commands SET status = 'claimed', claimed_by = ?, lease_until = ?, claimed_at = ? WHERE id = ?`
-      ).run(workerId, leaseUntil, now, row.id);
-
-      const payload = JSON.parse(row.payload);
-      return {
-        commandId: row.id,
-        sessionId: row.session_id,
-        workspaceId: row.workspace_id,
-        workspaceRoot: payload.workspaceRoot ?? ".",
-        artifact: payload.artifact,
-        review: payload.review,
-      };
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS events (
+          id TEXT PRIMARY KEY,
+          seq INTEGER UNIQUE,
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          producer TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          causation_id TEXT,
+          correlation_id TEXT,
+          payload TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE IF NOT EXISTS commands (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          producer TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          available_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          claimed_by TEXT,
+          claimed_at TEXT,
+          lease_until TEXT,
+          completed_at TEXT,
+          failed_at TEXT,
+          error_message TEXT,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          idempotency_key TEXT,
+          payload TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE IF NOT EXISTS workspaces (
+          id TEXT PRIMARY KEY,
+          root_path TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          metadata TEXT
+        );
+        CREATE TABLE IF NOT EXISTS subscription_checkpoints (
+          consumer_name TEXT PRIMARY KEY,
+          last_event_seq INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL
+        );
+      `);
     } finally {
       db.close();
     }
   }
 
-  function completeReviewCommand(
+  function ensureWorkspaceAndSession(dbPath: string, workspaceRoot: string, sessionId: string) {
+    const db = openDb(dbPath);
+    const { randomUUID } = require("node:crypto");
+    try {
+      const now = new Date().toISOString();
+      const workspaceId = `ws_${randomUUID()}`;
+
+      const existingWs = db.prepare("SELECT id FROM workspaces WHERE root_path = ?").get(workspaceRoot) as any;
+      const wsId = existingWs?.id ?? workspaceId;
+      if (!existingWs) {
+        db.prepare("INSERT INTO workspaces (id, root_path, created_at, updated_at) VALUES (?, ?, ?, ?)").run(wsId, workspaceRoot, now, now);
+      }
+
+      const existingSession = db.prepare("SELECT id FROM sessions WHERE id = ?").get(sessionId) as any;
+      if (!existingSession) {
+        db.prepare("INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)").run(sessionId, wsId, now, now);
+      }
+
+      return wsId;
+    } finally {
+      db.close();
+    }
+  }
+
+  function writeReviewRequestedEvent(
     dbPath: string,
-    commandId: string,
-    sessionId: string,
     workspaceId: string,
-    result: any,
+    sessionId: string,
+    requestId: string,
+    workspaceRoot: string,
+    patch: string,
+    changedFiles: Array<{ path: string; status: string }>,
+    summary?: string,
   ) {
     const db = openDb(dbPath);
     const { randomUUID } = require("node:crypto");
     try {
       const now = new Date().toISOString();
-      const workerId = `pi-ext-${process.pid}`;
       const eventId = `evt_${randomUUID()}`;
 
       db.prepare(
-        `UPDATE commands SET status = 'completed', completed_at = ? WHERE id = ?`
-      ).run(now, commandId);
-
-      db.prepare(
         `INSERT INTO events (id, workspace_id, session_id, type, producer, created_at, causation_id, correlation_id, payload)
-         VALUES (?, ?, ?, 'revision.proposed', ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, 'review.requested', 'pi-extension', ?, ?, ?, ?)`
       ).run(
         eventId,
         workspaceId,
         sessionId,
-        workerId,
         now,
-        commandId,
+        requestId,
         sessionId,
         JSON.stringify({
-          commandId,
-          adapter: "pi-extension",
-          mode: "live",
-          normalized: true,
-          revision: result.revision,
-          note: result.note,
+          requestId,
+          sessionId,
+          workspaceRoot,
+          artifact: { id: `art_${randomUUID()}`, type: "gitDiff", patch, changedFiles },
+          summary,
+          requestedAt: now,
         }),
       );
 
@@ -136,129 +160,186 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  function failReviewCommand(dbPath: string, commandId: string, errorMessage: string) {
-    const db = openDb(dbPath);
-    try {
-      const now = new Date().toISOString();
-      db.prepare(
-        `UPDATE commands SET status = 'failed', failed_at = ?, error_message = ? WHERE id = ?`
-      ).run(now, errorMessage, commandId);
-    } finally {
-      db.close();
-    }
+  function pollForReviewResponse(
+    dbPath: string,
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal | undefined,
+    pollMs: number,
+    timeoutMs: number,
+  ): Promise<any | null> {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+
+      const check = () => {
+        if (signal?.aborted) {
+          resolve(null);
+          return;
+        }
+
+        if (Date.now() - startTime > timeoutMs) {
+          resolve(null);
+          return;
+        }
+
+        try {
+          const db = openDb(dbPath);
+          try {
+            const row = db.prepare(
+              `SELECT payload FROM events
+               WHERE session_id = ? AND type = 'review.response' AND correlation_id = ?
+               ORDER BY seq DESC LIMIT 1`
+            ).get(sessionId, requestId) as any;
+
+            if (row) {
+              resolve(JSON.parse(row.payload));
+              return;
+            }
+          } finally {
+            db.close();
+          }
+        } catch (err) {
+          // retry
+        }
+
+        setTimeout(check, pollMs);
+      };
+
+      check();
+    });
   }
 
-  // -- Prompt building --
-
-  function buildReviewPrompt(review: PendingReview): string {
-    const comments = review.review.comments
-      .map((c) => {
-        const loc = c.line ?? `${c.startLine}-${c.endLine}`;
-        const scope = c.scope ?? "review";
-        return `- [${c.id}] ${c.path}:${loc} (${scope}/${c.category ?? "note"}) ${c.body}`;
-      })
-      .join("\n");
-
-    return [
-      "You have received an ARP code review to address.",
-      "",
-      `Changed files: ${review.artifact.changedFiles.map((f) => f.path).join(", ")}`,
-      "",
-      "Review comments:",
-      comments || "- none",
-      "",
-      "Diff:",
-      "```diff",
-      review.artifact.patch,
-      "```",
-      "",
-      "Read the relevant files to understand the full context, then use the arp_review_respond tool to submit your response.",
-      "For each comment, provide a resolution with status and explanation.",
-      "If a comment asks you to change code, explain what you would change and why.",
-    ].join("\n");
-  }
-
-  // -- Tool for structured response --
+  // -- Tool --
 
   pi.registerTool({
-    name: "arp_review_respond",
-    label: "ARP Review Respond",
+    name: "request_review",
+    label: "Request Review",
     description:
-      "Submit a structured response to an ARP code review. Call this after reading the code and considering all review comments.",
-    promptSnippet: "Submit structured ARP review response with resolutions for each comment",
+      "Request a human code review of the current changes. Captures the git diff and sends it to the reviewer. Blocks until the reviewer responds with comments. Use this when you want feedback on your changes before continuing.",
+    promptSnippet: "Request human code review of current git changes, blocks until reviewer responds",
     promptGuidelines: [
-      "Use arp_review_respond to submit your response to an ARP code review.",
-      "Before calling arp_review_respond, read the relevant source files to understand the full context.",
-      "Include one resolution for every review comment -- do not skip any.",
+      "Use request_review when you have made changes and want human feedback before proceeding.",
+      "request_review captures the current git diff automatically -- do not pass the diff yourself.",
+      "request_review blocks until the human reviewer responds, which may take minutes.",
+      "After receiving review feedback, read and address each comment before continuing.",
     ],
     parameters: Type.Object({
-      summary: Type.String({ description: "Brief summary of your review response" }),
-      resolutions: Type.Array(
-        Type.Object({
-          commentId: Type.String({ description: "The comment ID from the review" }),
-          status: Type.Union(
-            [
-              Type.Literal("addressed"),
-              Type.Literal("partially_addressed"),
-              Type.Literal("not_addressed"),
-              Type.Literal("needs_clarification"),
-            ],
-            { description: "Resolution status" },
-          ),
-          note: Type.String({ description: "Explanation of how the comment was addressed or why not" }),
-        }),
-        { description: "One resolution per review comment" },
-      ),
-      questions: Type.Optional(
-        Type.Array(Type.String(), { description: "Questions back to the reviewer, if any" }),
+      summary: Type.Optional(
+        Type.String({ description: "Brief description of what you changed and what you want reviewed" }),
       ),
     }),
 
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      if (!pendingReview || !busDbPath) {
+    async execute(_toolCallId, params, signal, onUpdate, ctx) {
+      if (!busDbPath) {
         return {
-          content: [{ type: "text" as const, text: "No active ARP review to respond to." }],
-          details: {},
-        };
-      }
-
-      const review = pendingReview;
-      pendingReview = null;
-
-      const revision = {
-        id: `rev_${Date.now()}`,
-        sessionId: review.sessionId,
-        basedOnReviewId: `review_${review.commandId}`,
-        summary: params.summary,
-        patch: review.artifact.patch,
-        resolutions: params.resolutions,
-        questions: params.questions,
-      };
-
-      try {
-        const eventId = completeReviewCommand(busDbPath, review.commandId, {
-          revision,
-          note: `Reviewed by pi extension`,
-        });
-
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `ARP review response submitted.\n- Command: ${review.commandId}\n- Event: ${eventId}\n- Resolutions: ${params.resolutions.length}`,
-            },
-          ],
-          details: { revision, eventId },
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        failReviewCommand(busDbPath, review.commandId, msg);
-        return {
-          content: [{ type: "text" as const, text: `Failed to submit ARP review: ${msg}` }],
+          content: [{ type: "text" as const, text: "ARP bus not configured. Set ARP_BUS_DB_PATH." }],
           details: {},
           isError: true,
         };
       }
+
+      // Capture git diff
+      onUpdate?.({ content: [{ type: "text" as const, text: "Capturing git diff..." }] });
+
+      let patch: string;
+      let changedFiles: Array<{ path: string; status: string }>;
+      try {
+        const diffResult = await pi.exec("git", ["diff", "HEAD"], { signal });
+        patch = diffResult.stdout;
+        if (!patch.trim()) {
+          return {
+            content: [{ type: "text" as const, text: "No changes to review. git diff HEAD is empty." }],
+            details: {},
+          };
+        }
+
+        const nameStatusResult = await pi.exec("git", ["diff", "HEAD", "--name-status"], { signal });
+        changedFiles = nameStatusResult.stdout
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [status, ...pathParts] = line.split("\t");
+            const filePath = pathParts.join("\t");
+            const statusMap: Record<string, string> = { A: "added", M: "modified", D: "deleted", R: "renamed" };
+            return { path: filePath, status: statusMap[status?.[0] ?? "M"] ?? "modified" };
+          });
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Failed to capture git diff: ${err instanceof Error ? err.message : String(err)}` }],
+          details: {},
+          isError: true,
+        };
+      }
+
+      // Write review request to bus
+      const { randomUUID } = require("node:crypto");
+      const requestId = `req_${randomUUID()}`;
+      const sessionId = `pi_${process.pid}_${Date.now()}`;
+      const workspaceRoot = ctx.cwd;
+
+      ensureSchema(busDbPath);
+      const workspaceId = ensureWorkspaceAndSession(busDbPath, workspaceRoot, sessionId);
+
+      writeReviewRequestedEvent(
+        busDbPath,
+        workspaceId,
+        sessionId,
+        requestId,
+        workspaceRoot,
+        patch,
+        changedFiles,
+        params.summary,
+      );
+
+      onUpdate?.({
+        content: [{ type: "text" as const, text: `Review requested (${requestId}). Waiting for reviewer...\n${changedFiles.length} changed files.` }],
+      });
+
+      // Block waiting for response
+      const pollMs = parseInt(process.env.ARP_REVIEW_POLL_MS ?? "2000", 10);
+      const timeoutMs = parseInt(process.env.ARP_REVIEW_TIMEOUT_MS ?? "600000", 10);
+
+      const response = await pollForReviewResponse(busDbPath, sessionId, requestId, signal, pollMs, timeoutMs);
+
+      if (!response) {
+        return {
+          content: [{ type: "text" as const, text: `Review timed out after ${timeoutMs / 1000}s. No response received for ${requestId}.` }],
+          details: { requestId, timedOut: true },
+        };
+      }
+
+      // Format the review feedback for the agent
+      const comments = response.review?.comments ?? [];
+      if (comments.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: `Review completed with no comments. ${response.review?.summary ?? "Approved."}` }],
+          details: { requestId, response },
+        };
+      }
+
+      const commentLines = comments.map((c: any) => {
+        const loc = c.line ?? `${c.startLine}-${c.endLine}`;
+        const scope = c.scope ?? "review";
+        const cat = c.category ?? "note";
+        return `- [${cat}] ${c.path}:${loc} (${scope}): ${c.body}`;
+      });
+
+      const feedbackText = [
+        `## Review Feedback`,
+        "",
+        response.review?.summary ? `Summary: ${response.review.summary}` : null,
+        "",
+        `${comments.length} comment${comments.length === 1 ? "" : "s"}:`,
+        "",
+        ...commentLines,
+      ]
+        .filter((line) => line !== null)
+        .join("\n");
+
+      return {
+        content: [{ type: "text" as const, text: feedbackText }],
+        details: { requestId, response },
+      };
     },
   });
 
@@ -266,37 +347,13 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     busDbPath = process.env.ARP_BUS_DB_PATH;
-    if (!busDbPath) {
-      return;
+    if (busDbPath) {
+      ensureSchema(busDbPath);
+      ctx.ui.notify("ARP: review tool available", "info");
     }
-
-    // One-shot mode: immediately check for a pending review
-    try {
-      const review = claimNextReviewCommand(busDbPath);
-      if (review) {
-        pendingReview = review;
-        ctx.ui.notify(`ARP: processing review ${review.commandId}`, "info");
-      } else {
-        ctx.ui.notify("ARP: no pending reviews found", "info");
-      }
-    } catch (err) {
-      ctx.ui.notify(`ARP: bus error: ${err instanceof Error ? err.message : String(err)}`, "error");
-    }
-  });
-
-  // Inject review context before the agent starts
-  pi.on("before_agent_start", async (event, _ctx) => {
-    if (!pendingReview) return;
-    return {
-      systemPrompt:
-        event.systemPrompt +
-        "\n\nYou have a pending ARP code review to process. " +
-        "Read the relevant source files for context, then use the arp_review_respond tool to submit your structured response. " +
-        "Include one resolution for every review comment.",
-    };
   });
 
   pi.on("session_shutdown", async () => {
-    pendingReview = null;
+    busDbPath = undefined;
   });
 }

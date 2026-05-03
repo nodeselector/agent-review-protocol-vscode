@@ -30,8 +30,10 @@ import {
   markDraftCommentsSubmitted,
 } from "./review-store.js";
 import { hydrateReviewSessionState } from "./review-session.js";
+import { pollForReviewRequests, submitReviewResponse, type ReviewRequest } from "./review-request.js";
 
 const outputChannel = vscode.window.createOutputChannel("ARP");
+let activeReviewRequest: ReviewRequest | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   const reviewComments = new ReviewCommentsManager();
@@ -427,6 +429,96 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("arp.showOutput", async () => {
       outputChannel.show(true);
+    }),
+    vscode.commands.registerCommand("arp.checkForReviewRequest", async () => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const config = getExtensionConfig();
+      const request = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
+      if (!request) {
+        void vscode.window.showInformationMessage("No pending review requests from agents.");
+        return;
+      }
+
+      logJson("reviewRequest", request);
+      const action = await vscode.window.showInformationMessage(
+        `Agent requested review: ${request.changedFiles.length} changed files. ${request.summary ?? ""}`,
+        "Open Review",
+        "Dismiss",
+      );
+
+      if (action !== "Open Review") {
+        return;
+      }
+
+      activeReviewRequest = request;
+      await ensureSession(workspaceRoot);
+      await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
+        reviewComments,
+        reviewFiles,
+        reviewOverview,
+        reviewStatusBar,
+        reviewCommentCodeLensProvider,
+      });
+      reviewCommentCodeLensProvider.setHasActiveSession(true);
+      reviewComments.setHasActiveSession(true);
+      void vscode.window.showInformationMessage(`Review session started for ${request.changedFiles.length} files. Add your comments and submit.`);
+    }),
+    vscode.commands.registerCommand("arp.submitReviewResponse", async () => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      if (!activeReviewRequest) {
+        void vscode.window.showWarningMessage("No active review request. Run ARP: Check for Review Request first.");
+        return;
+      }
+
+      const config = getExtensionConfig();
+      const store = await loadReviewStore(workspaceRoot);
+      const activeDrafts = getActiveDraftComments(store);
+
+      if (activeDrafts.length === 0) {
+        void vscode.window.showWarningMessage("No draft comments to submit.");
+        return;
+      }
+
+      try {
+        const eventId = await submitReviewResponse(
+          workspaceRoot,
+          activeReviewRequest,
+          activeDrafts,
+          `Review with ${activeDrafts.length} comments`,
+          config.busDbPath || undefined,
+        );
+
+        await markDraftCommentsSubmitted(
+          workspaceRoot,
+          activeDrafts.map((c) => c.id),
+        );
+
+        logLine(`Submitted review response: ${eventId} for request ${activeReviewRequest.requestId}`);
+        void vscode.window.showInformationMessage(
+          `Review submitted with ${activeDrafts.length} comments. The agent will receive your feedback.`,
+        );
+
+        activeReviewRequest = null;
+        await reviewComments.refresh();
+        await reviewFiles.refresh();
+        await reviewOverview.refresh();
+        await reviewStatusBar.refresh();
+        reviewCommentCodeLensProvider.refresh();
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Failed to submit review: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }),
   );
 }

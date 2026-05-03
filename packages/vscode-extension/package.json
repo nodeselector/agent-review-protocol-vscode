@@ -90,6 +90,14 @@
       {
         "command": "arp.deleteDraftComment",
         "title": "ARP: Delete Draft Comment"
+      },
+      {
+        "command": "arp.checkForReviewRequest",
+        "title": "ARP: Check for Review Request"
+      },
+      {
+        "command": "arp.submitReviewResponse",
+        "title": "ARP: Submit Review Response"
       }
     ],
     "configuration": {
