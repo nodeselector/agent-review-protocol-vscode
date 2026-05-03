@@ -15,6 +15,7 @@
     "onCommand:arp.showDraftComments",
     "onCommand:arp.clearDraftComments",
     "onCommand:arp.submitStubReview",
+    "onCommand:arp.submitReviewToBus",
     "onCommand:arp.showOutput"
   ],
   "main": "./dist/vscode-extension/src/extension.js",
@@ -39,6 +40,10 @@
       {
         "command": "arp.submitStubReview",
         "title": "ARP: Submit Stub Review"
+      },
+      {
+        "command": "arp.submitReviewToBus",
+        "title": "ARP: Submit Review to Bus"
       },
       {
         "command": "arp.showOutput",
@@ -69,6 +74,11 @@
           "default": 60000,
           "minimum": 1000,
           "description": "Timeout in milliseconds for adapter RPC calls."
+        },
+        "arp.busDbPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to the local SQLite ARP bus database. Defaults to .arp/bus/arp.db in the current workspace."
         }
       }
     }
@@ -80,7 +90,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@arp/protocol": "workspace:*"
+    "@arp/protocol": "workspace:*",
+    "@arp/store-sqlite": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

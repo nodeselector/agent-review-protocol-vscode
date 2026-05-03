@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { type CommentCategory } from "../../protocol/src/index.js";
 import { sendJsonRpc } from "./rpc-client.js";
 import { captureGitDiffArtifact } from "./git-diff.js";
+import { enqueueDraftReviewToBus } from "./bus-review.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -175,6 +176,75 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("arp.submitReviewToBus", async () => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const config = getExtensionConfig();
+      const session = await ensureSession(workspaceRoot);
+      const store = await loadReviewStore(workspaceRoot);
+      if (store.comments.length === 0) {
+        void vscode.window.showWarningMessage("No draft comments to submit.");
+        return;
+      }
+
+      let artifact;
+      try {
+        artifact = await captureGitDiffArtifact(workspaceRoot);
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Failed to capture git diff: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return;
+      }
+
+      if (!artifact.patch.trim() || artifact.changedFiles.length === 0) {
+        void vscode.window.showWarningMessage("Current git diff is empty. Make a change before submitting review.");
+        return;
+      }
+
+      try {
+        const result = await enqueueDraftReviewToBus({
+          workspaceRoot,
+          session,
+          artifact,
+          review: {
+            event: "comment",
+            summary: "Draft review from VS Code",
+            comments: store.comments,
+          },
+          dbPath: config.busDbPath || undefined,
+        });
+
+        logJson("submitReviewToBus", result);
+        const document = await vscode.workspace.openTextDocument({
+          content: [
+            "# ARP Review Enqueued",
+            "",
+            `- Command: ${result.commandId}`,
+            `- Session: ${result.sessionId}`,
+            `- Workspace: ${result.workspaceId}`,
+            `- DB: ${result.dbPath}`,
+            `- Changed files: ${artifact.changedFiles.length}`,
+            `- Comments submitted: ${store.comments.length}`,
+            "",
+            "The review was enqueued into the local ARP bus.",
+            "No worker is consuming `review.submit` yet.",
+          ].join("\n"),
+          language: "markdown",
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+      } catch (error) {
+        outputChannel.show(true);
+        void vscode.window.showErrorMessage(formatCommandError("submit review to bus", error));
+      }
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("arp.showOutput", async () => {
       outputChannel.show(true);
     }),
@@ -190,6 +260,7 @@ function getExtensionConfig(): {
   adapterCommand: string;
   referenceServerTimeoutMs: number;
   adapterTimeoutMs: number;
+  busDbPath: string;
 } {
   const config = vscode.workspace.getConfiguration("arp");
 
@@ -198,6 +269,7 @@ function getExtensionConfig(): {
     adapterCommand: config.get<string>("adapterCommand", "arp-pi-adapter"),
     referenceServerTimeoutMs: config.get<number>("referenceServerTimeoutMs", 10000),
     adapterTimeoutMs: config.get<number>("adapterTimeoutMs", 60000),
+    busDbPath: config.get<string>("busDbPath", ""),
   };
 }
 

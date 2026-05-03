@@ -118,6 +118,13 @@ export interface RevisionRequestResult {
   revision: Revision;
 }
 
+export interface ReviewSubmitCommandPayload {
+  artifact: Artifact;
+  review: ReviewSubmitParams["review"];
+  submittedAt: string;
+  workspaceRoot: string;
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

@@ -106,6 +106,7 @@ export interface AdvanceCheckpointInput {
 }
 
 export interface CreateSessionInput {
+  sessionId?: string;
   workspaceId: string;
   metadata?: Record<string, unknown>;
   createdAt: string;

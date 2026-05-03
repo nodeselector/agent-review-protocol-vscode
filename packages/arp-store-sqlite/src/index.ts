@@ -266,7 +266,7 @@ export class SqliteArpStore implements CommandRepository, EventRepository, Subsc
   }
 
   async createSession(input: CreateSessionInput): Promise<SessionRecord> {
-    const id = `sess_${crypto.randomUUID()}`;
+    const id = input.sessionId ?? `sess_${crypto.randomUUID()}`;
     this.db.prepare(
       `INSERT INTO sessions (id, workspace_id, status, created_at, updated_at, metadata_json)
        VALUES (?, ?, 'active', ?, ?, ?)`

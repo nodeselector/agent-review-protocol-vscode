@@ -26,6 +26,7 @@ Local prototype. This repo currently contains:
 - initial protocol types
 - reference server
 - VS Code command-driven review scaffold
+- optional bus-backed review submission path via local SQLite
 - pi adapter with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
@@ -66,6 +67,7 @@ Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 2. `ARP: Add Draft Comment at Cursor`
 3. `ARP: Show Draft Comments`
 4. `ARP: Submit Stub Review`
+5. `ARP: Submit Review to Bus`
 
 You should get a markdown result document plus raw JSON in the ARP output channel.
 
@@ -75,6 +77,7 @@ If your binaries are not on `PATH`, use the local wrapper scripts from this repo
 - `arp.adapterCommand` -> `/absolute/path/to/agent-review-protocol-vscode/scripts/arp-pi-adapter`
 - `arp.referenceServerTimeoutMs`
 - `arp.adapterTimeoutMs`
+- `arp.busDbPath` - optional override for the local SQLite bus database
 
 ## Workspace layout
 
