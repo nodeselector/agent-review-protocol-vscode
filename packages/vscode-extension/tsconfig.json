@@ -5,5 +5,5 @@
     "types": ["node", "vscode"],
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "../protocol/src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "../protocol/src/**/*.ts"]
 }

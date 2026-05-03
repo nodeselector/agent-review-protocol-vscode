@@ -14,6 +14,7 @@ import {
   getRelativePathFromReviewUri,
   isReviewDocumentUri,
   parseReviewDocumentQuery,
+  REVIEW_SCHEME_NAME,
 } from "./review-files.js";
 import type { AdapterReviewResult, Comment, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
 
@@ -21,9 +22,10 @@ const COMMENT_CONTROLLER_ID = "arp-review";
 const COMMENT_CONTEXT_VALUE = "arp-draft-comment";
 const THREAD_CONTEXT_VALUE = "arp-draft-thread";
 
-export class ReviewCommentsManager implements vscode.Disposable, vscode.CommentingRangeProvider {
+export class ReviewCommentsManager implements vscode.Disposable, vscode.CommentingRangeProvider2 {
+  readonly resourceHints = { schemes: [REVIEW_SCHEME_NAME, "file"] } as const;
   private readonly controller: vscode.CommentController;
-  private readonly threads = new Map<string, vscode.CommentThread>();
+  private readonly threads = new Map<string, vscode.CommentThread | vscode.CommentThread2>();
   private workspaceRoot?: string;
   private latestResult?: AdapterReviewResult;
   private hasActiveSession = false;
@@ -34,7 +36,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       prompt: "Create ARP draft comment",
       placeHolder: "Explain the feedback for this change",
     };
-    this.controller.commentingRangeProvider = this;
+    this.controller.commentingRangeProvider = this as unknown as vscode.CommentingRangeProvider;
   }
 
   async setWorkspaceRoot(workspaceRoot: string | undefined): Promise<void> {
