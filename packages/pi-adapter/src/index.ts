@@ -8,7 +8,7 @@ import {
   type JsonRpcSuccess,
   type ReviewSubmitParams,
 } from "../../protocol/src/index.js";
-import { buildPrompt, invokePiForReview, normalizeAssistantTextToRevision } from "./pi-client.js";
+import { buildPrompt, createStubRevision, invokePiForReview, normalizeAssistantTextToRevision } from "./pi-client.js";
 
 const capabilities: Capabilities = {
   supports: {
@@ -63,7 +63,8 @@ async function handle(request: JsonRpcRequest): Promise<void> {
             adapter: "pi",
             mode: "stub",
             prompt: buildPrompt(params),
-            revision: normalizeAssistantTextToRevision("Stub mode enabled for testing.", params).revision,
+            normalized: true,
+            revision: createStubRevision(params),
             note: "Live pi invocation disabled by ARP_PI_ADAPTER_DISABLE_LIVE=1.",
           }),
         );

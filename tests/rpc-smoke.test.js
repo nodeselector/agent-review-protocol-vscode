@@ -143,7 +143,10 @@ test("pi adapter returns a stubbed response when live mode is disabled", async (
   assert.match(result.prompt, /diff --git a\/src\/fs.ts b\/src\/fs.ts/);
   assert.match(result.prompt, /Return exactly one JSON object/);
   assert.match(result.note, /Live pi invocation disabled/);
-  assert.equal(result.revision.resolutions[0]?.status, "needs_clarification");
+  assert.equal(result.normalized, true);
+  assert.equal(result.revision.summary, "Stub mode enabled for testing.");
+  assert.equal(result.revision.resolutions[0]?.status, "not_addressed");
+  assert.match(result.revision.resolutions[0]?.note ?? "", /Stub response only/);
 });
 
 test("pi adapter returns fallback response when live invocation fails", async () => {

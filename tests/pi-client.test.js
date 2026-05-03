@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildPrompt,
+  createStubRevision,
   extractAssistantTextFromPiJson,
   invokePiForReview,
   normalizeAssistantTextToRevision,
@@ -99,6 +100,15 @@ test("normalizeAssistantTextToRevision parses structured JSON", async () => {
   assert.equal(normalized.normalized, true);
   assert.equal(normalized.revision.summary, "Handled the issue.");
   assert.equal(normalized.revision.resolutions[0]?.status, "addressed");
+});
+
+test("createStubRevision returns a deliberate structured mock", async () => {
+  const params = await makeParams();
+  const revision = createStubRevision(params);
+
+  assert.equal(revision.summary, "Stub mode enabled for testing.");
+  assert.equal(revision.resolutions[0]?.status, "not_addressed");
+  assert.match(revision.resolutions[0]?.note ?? "", /Stub response only/);
 });
 
 test("normalizeAssistantTextToRevision falls back for unstructured output", async () => {

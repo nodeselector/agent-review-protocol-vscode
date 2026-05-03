@@ -154,6 +154,22 @@ export function extractAssistantTextFromPiJson(output: string): string {
   return fallbackText;
 }
 
+export function createStubRevision(params: ReviewSubmitParams): Revision {
+  return {
+    id: `rev_${Date.now()}`,
+    sessionId: params.sessionId,
+    basedOnReviewId: `review_${Date.now()}`,
+    summary: "Stub mode enabled for testing.",
+    patch: params.artifact.patch,
+    resolutions: params.review.comments.map((comment) => ({
+      commentId: comment.id,
+      status: "not_addressed",
+      note: "Stub response only. No live agent revision was attempted.",
+    })),
+    questions: ["Stub mode is active. Disable ARP_PI_ADAPTER_DISABLE_LIVE to exercise the live adapter path."],
+  };
+}
+
 export function normalizeAssistantTextToRevision(
   assistantText: string,
   params: ReviewSubmitParams,
