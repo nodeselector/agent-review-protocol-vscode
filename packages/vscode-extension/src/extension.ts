@@ -2,7 +2,12 @@ import * as vscode from "vscode";
 import { type CommentCategory } from "../../protocol/src/index.js";
 import { sendJsonRpc } from "./rpc-client.js";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import { enqueueDraftReviewToBus, getLatestRevisionFromBus } from "./bus-review.js";
+import {
+  enqueueDraftReviewToBus,
+  getCurrentBusEventSeq,
+  getLatestRevisionFromBus,
+  waitForRevisionFromBus,
+} from "./bus-review.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -207,6 +212,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
+        const busDbPath = config.busDbPath || undefined;
+        const afterSeq = await getCurrentBusEventSeq(workspaceRoot, busDbPath);
         const result = await enqueueDraftReviewToBus({
           workspaceRoot,
           session,
@@ -216,10 +223,31 @@ export function activate(context: vscode.ExtensionContext): void {
             summary: "Draft review from VS Code",
             comments: store.comments,
           },
-          dbPath: config.busDbPath || undefined,
+          dbPath: busDbPath,
         });
 
         logJson("submitReviewToBus", result);
+
+        const latest = await waitForRevisionFromBus({
+          workspaceRoot,
+          sessionId: session.id,
+          commandId: result.commandId,
+          dbPath: result.dbPath,
+          afterSeq,
+          timeoutMs: config.busWaitTimeoutMs,
+          pollIntervalMs: config.busPollIntervalMs,
+        });
+
+        if (latest) {
+          logJson("submitReviewToBus.result", latest);
+          await showReviewResult(
+            { result: latest.result },
+            artifact.changedFiles.length,
+            store.comments.length,
+          );
+          return;
+        }
+
         const document = await vscode.workspace.openTextDocument({
           content: [
             "# ARP Review Enqueued",
@@ -230,9 +258,11 @@ export function activate(context: vscode.ExtensionContext): void {
             `- DB: ${result.dbPath}`,
             `- Changed files: ${artifact.changedFiles.length}`,
             `- Comments submitted: ${store.comments.length}`,
+            `- Wait timeout ms: ${config.busWaitTimeoutMs}`,
             "",
             "The review was enqueued into the local ARP bus.",
-            "No worker is consuming `review.submit` yet.",
+            "No matching `revision.proposed` arrived before the wait timeout.",
+            "Run `ARP: Show Latest Bus Revision` after the worker finishes.",
           ].join("\n"),
           language: "markdown",
         });
@@ -292,6 +322,8 @@ function getExtensionConfig(): {
   referenceServerTimeoutMs: number;
   adapterTimeoutMs: number;
   busDbPath: string;
+  busWaitTimeoutMs: number;
+  busPollIntervalMs: number;
 } {
   const config = vscode.workspace.getConfiguration("arp");
 
@@ -301,6 +333,8 @@ function getExtensionConfig(): {
     referenceServerTimeoutMs: config.get<number>("referenceServerTimeoutMs", 10000),
     adapterTimeoutMs: config.get<number>("adapterTimeoutMs", 60000),
     busDbPath: config.get<string>("busDbPath", ""),
+    busWaitTimeoutMs: config.get<number>("busWaitTimeoutMs", 15000),
+    busPollIntervalMs: config.get<number>("busPollIntervalMs", 500),
   };
 }
 

@@ -36,6 +36,17 @@ export interface LatestBusRevisionResult {
   result: AdapterReviewResult;
 }
 
+export interface WaitForRevisionFromBusInput {
+  workspaceRoot: string;
+  sessionId: string;
+  commandId: string;
+  dbPath?: string;
+  consumerName?: string;
+  afterSeq?: number;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+}
+
 export async function enqueueDraftReviewToBus(
   input: EnqueueDraftReviewToBusInput,
 ): Promise<EnqueueDraftReviewToBusResult> {
@@ -106,24 +117,99 @@ export async function getLatestRevisionFromBus(
     return null;
   }
 
-  return {
-    dbPath: resolvedDbPath,
-    eventId: latest.id,
-    eventSeq: latest.seq ?? 0,
-    sessionId: latest.sessionId,
-    commandId: latest.payload.commandId,
-    result: {
-      adapter: latest.payload.adapter,
-      mode: latest.payload.mode,
-      normalized: latest.payload.normalized,
-      revision: latest.payload.revision,
-      note: latest.payload.note,
-      prompt: latest.payload.prompt,
-      rawOutput: latest.payload.rawOutput,
-    },
-  };
+  return mapRevisionEvent(resolvedDbPath, latest);
+}
+
+export async function getCurrentBusEventSeq(workspaceRoot: string, dbPath?: string): Promise<number> {
+  const resolvedDbPath = dbPath ?? getDefaultBusDbPath(workspaceRoot);
+  const store = new SqliteArpStore({ dbPath: resolvedDbPath });
+  const events = await store.readEventsAfter({
+    consumerName: "vscode-high-water-mark",
+    afterSeq: 0,
+    limit: 10_000,
+  });
+  const latest = events.at(-1);
+  return latest?.seq ?? 0;
+}
+
+export async function waitForRevisionFromBus(
+  input: WaitForRevisionFromBusInput,
+): Promise<LatestBusRevisionResult | null> {
+  const resolvedDbPath = input.dbPath ?? getDefaultBusDbPath(input.workspaceRoot);
+  const store = new SqliteArpStore({ dbPath: resolvedDbPath });
+  const consumerName = input.consumerName ?? `vscode-session-${input.sessionId}`;
+  const existingCheckpoint = await store.getCheckpoint(consumerName);
+  let cursor = Math.max(input.afterSeq ?? 0, existingCheckpoint?.lastEventSeq ?? 0);
+  const timeoutMs = input.timeoutMs ?? 15_000;
+  const pollIntervalMs = input.pollIntervalMs ?? 500;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() <= deadline) {
+    const events = await store.readEventsAfter<RevisionProposedEventPayload>({
+      consumerName,
+      afterSeq: cursor,
+      limit: 100,
+      sessionId: input.sessionId,
+      eventTypes: ["revision.proposed"],
+    });
+
+    for (const event of events) {
+      cursor = Math.max(cursor, event.seq ?? cursor);
+      if (event.payload.commandId === input.commandId) {
+        await store.advanceCheckpoint({
+          consumerName,
+          nextEventSeq: cursor,
+          updatedAt: nowIso(),
+        });
+        return mapRevisionEvent(resolvedDbPath, event);
+      }
+    }
+
+    if (events.length > 0) {
+      await store.advanceCheckpoint({
+        consumerName,
+        nextEventSeq: cursor,
+        updatedAt: nowIso(),
+      });
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  return null;
 }
 
 export function getDefaultBusDbPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, ".arp", "bus", "arp.db");
+}
+
+function mapRevisionEvent(
+  dbPath: string,
+  event: {
+    id: string;
+    seq?: number;
+    sessionId: string;
+    payload: RevisionProposedEventPayload;
+  },
+): LatestBusRevisionResult {
+  return {
+    dbPath,
+    eventId: event.id,
+    eventSeq: event.seq ?? 0,
+    sessionId: event.sessionId,
+    commandId: event.payload.commandId,
+    result: {
+      adapter: event.payload.adapter,
+      mode: event.payload.mode,
+      normalized: event.payload.normalized,
+      revision: event.payload.revision,
+      note: event.payload.note,
+      prompt: event.payload.prompt,
+      rawOutput: event.payload.rawOutput,
+    },
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

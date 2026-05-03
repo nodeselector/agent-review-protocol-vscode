@@ -6,8 +6,10 @@ import path from "node:path";
 import { ensureSession, addDraftComment } from "../packages/vscode-extension/dist/vscode-extension/src/review-store.js";
 import {
   enqueueDraftReviewToBus,
+  getCurrentBusEventSeq,
   getDefaultBusDbPath,
   getLatestRevisionFromBus,
+  waitForRevisionFromBus,
 } from "../packages/vscode-extension/dist/vscode-extension/src/bus-review.js";
 import { SqliteArpStore } from "../packages/arp-store-sqlite/dist/index.js";
 import { processNextReviewCommand } from "../packages/pi-adapter/dist/pi-adapter/src/bus-worker.js";
@@ -97,9 +99,113 @@ test("getLatestRevisionFromBus returns the newest revision.proposed event for th
   assert.equal(latest?.result.revision.sessionId, session.id);
 });
 
- test("getLatestRevisionFromBus returns null when the session has no revision events", async () => {
+test("getLatestRevisionFromBus returns null when the session has no revision events", async () => {
   const workspaceRoot = await makeWorkspace();
   const session = await ensureSession(workspaceRoot);
   const latest = await getLatestRevisionFromBus(workspaceRoot, session.id);
+  assert.equal(latest, null);
+});
+
+test("getCurrentBusEventSeq returns the latest event sequence", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const session = await ensureSession(workspaceRoot);
+  const comment = await addDraftComment(workspaceRoot, {
+    path: "src/example.ts",
+    side: "new",
+    line: 13,
+    body: "Track the high-water mark.",
+    category: "note",
+  });
+
+  const enqueueResult = await enqueueDraftReviewToBus({
+    workspaceRoot,
+    session,
+    review: {
+      event: "comment",
+      summary: "Draft review from VS Code",
+      comments: [comment],
+    },
+    artifact: {
+      id: "art_3",
+      type: "gitDiff",
+      patch: "diff --git a/src/example.ts b/src/example.ts",
+      changedFiles: [{ path: "src/example.ts", status: "modified" }],
+    },
+  });
+
+  process.env.ARP_PI_ADAPTER_DISABLE_LIVE = "1";
+  await processNextReviewCommand({ dbPath: enqueueResult.dbPath, workerId: "worker-test" });
+  delete process.env.ARP_PI_ADAPTER_DISABLE_LIVE;
+
+  const seq = await getCurrentBusEventSeq(workspaceRoot);
+  assert.equal(seq, 1);
+});
+
+test("waitForRevisionFromBus returns the matching revision and advances checkpoint", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const session = await ensureSession(workspaceRoot);
+  const comment = await addDraftComment(workspaceRoot, {
+    path: "src/example.ts",
+    side: "new",
+    line: 15,
+    body: "Wait for the exact command result.",
+    category: "blocking",
+  });
+
+  const enqueueResult = await enqueueDraftReviewToBus({
+    workspaceRoot,
+    session,
+    review: {
+      event: "comment",
+      summary: "Draft review from VS Code",
+      comments: [comment],
+    },
+    artifact: {
+      id: "art_4",
+      type: "gitDiff",
+      patch: "diff --git a/src/example.ts b/src/example.ts",
+      changedFiles: [{ path: "src/example.ts", status: "modified" }],
+    },
+  });
+
+  process.env.ARP_PI_ADAPTER_DISABLE_LIVE = "1";
+  const pending = waitForRevisionFromBus({
+    workspaceRoot,
+    sessionId: session.id,
+    commandId: enqueueResult.commandId,
+    dbPath: enqueueResult.dbPath,
+    consumerName: "test-consumer",
+    afterSeq: 0,
+    timeoutMs: 1000,
+    pollIntervalMs: 20,
+  });
+
+  setTimeout(() => {
+    void processNextReviewCommand({ dbPath: enqueueResult.dbPath, workerId: "worker-test" });
+  }, 50);
+
+  const latest = await pending;
+  delete process.env.ARP_PI_ADAPTER_DISABLE_LIVE;
+
+  assert.ok(latest);
+  assert.equal(latest?.commandId, enqueueResult.commandId);
+  assert.equal(latest?.result.mode, "stub");
+
+  const store = new SqliteArpStore({ dbPath: enqueueResult.dbPath });
+  const checkpoint = await store.getCheckpoint("test-consumer");
+  assert.equal(checkpoint?.lastEventSeq, latest?.eventSeq);
+});
+
+test("waitForRevisionFromBus returns null on timeout", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const session = await ensureSession(workspaceRoot);
+  const latest = await waitForRevisionFromBus({
+    workspaceRoot,
+    sessionId: session.id,
+    commandId: "cmd_missing",
+    consumerName: "test-timeout-consumer",
+    timeoutMs: 50,
+    pollIntervalMs: 10,
+  });
   assert.equal(latest, null);
 });

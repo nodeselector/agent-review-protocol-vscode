@@ -84,6 +84,18 @@
           "type": "string",
           "default": "",
           "description": "Optional path to the local SQLite ARP bus database. Defaults to .arp/bus/arp.db in the current workspace."
+        },
+        "arp.busWaitTimeoutMs": {
+          "type": "number",
+          "default": 15000,
+          "minimum": 0,
+          "description": "How long Submit Review to Bus waits for a matching revision.proposed event before falling back to enqueue-only confirmation."
+        },
+        "arp.busPollIntervalMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 50,
+          "description": "Polling interval in milliseconds while waiting for a matching revision.proposed event."
         }
       }
     }
