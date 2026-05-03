@@ -343,6 +343,20 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // -- Slash command --
+
+  pi.registerCommand("review", {
+    description: "Request a human code review of current changes",
+    handler: async (args, ctx) => {
+      const summary = args.trim() || undefined;
+      pi.sendUserMessage(
+        summary
+          ? `Use request_review to get human feedback on the current changes. Summary: ${summary}`
+          : "Use request_review to get human feedback on the current changes.",
+      );
+    },
+  });
+
   // -- Lifecycle --
 
   pi.on("session_start", async (_event, ctx) => {
