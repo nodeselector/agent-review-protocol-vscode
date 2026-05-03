@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { type CommentCategory } from "../../protocol/src/index.js";
 import { sendJsonRpc } from "./rpc-client.js";
 import { captureGitDiffArtifact } from "./git-diff.js";
-import { enqueueDraftReviewToBus } from "./bus-review.js";
+import { enqueueDraftReviewToBus, getLatestRevisionFromBus } from "./bus-review.js";
 import {
   addDraftComment,
   clearDraftComments,
@@ -245,6 +245,37 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("arp.showLatestBusRevision", async () => {
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showErrorMessage("Open a workspace first.");
+        return;
+      }
+
+      const config = getExtensionConfig();
+      const session = await ensureSession(workspaceRoot);
+
+      try {
+        const latest = await getLatestRevisionFromBus(workspaceRoot, session.id, config.busDbPath || undefined);
+        if (!latest) {
+          void vscode.window.showWarningMessage("No revision.proposed events found for the current session.");
+          return;
+        }
+
+        logJson("showLatestBusRevision", latest);
+        await showReviewResult(
+          { result: latest.result },
+          "unknown",
+          latest.result.revision.resolutions.length,
+        );
+      } catch (error) {
+        outputChannel.show(true);
+        void vscode.window.showErrorMessage(formatCommandError("show latest bus revision", error));
+      }
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("arp.showOutput", async () => {
       outputChannel.show(true);
     }),
@@ -288,7 +319,11 @@ function logJson(label: string, value: unknown): void {
   outputChannel.appendLine("");
 }
 
-async function showReviewResult(response: any, changedFileCount: number, commentCount: number): Promise<void> {
+async function showReviewResult(
+  response: any,
+  changedFileCount: number | string,
+  commentCount: number | string,
+): Promise<void> {
   const result = response?.result ?? {};
   const revision = result.revision ?? {};
   const lines = [

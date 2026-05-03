@@ -27,6 +27,7 @@ Current automated coverage includes:
 - review store tests
 - bus enqueue tests for `review.submit`
 - local worker tests for `review.submit` -> `revision.proposed`
+- VS Code bus read tests for latest session revision lookup
 - pi adapter prompt + normalization tests
 - pi adapter stub-mode smoke test
 - pi adapter fallback-mode smoke test when `pi` is unavailable
@@ -110,6 +111,13 @@ scripts/arp-bus-worker --db /absolute/path/to/workspace/.arp/bus/arp.db
 
 3. Confirm the command reports `kind: "processed"`.
 4. Confirm a `revision.proposed` event exists in the SQLite bus.
+
+### Validate bus revision read path
+
+1. After the worker runs, return to the Extension Development Host.
+2. Run `ARP: Show Latest Bus Revision`.
+3. Confirm a markdown review result opens.
+4. Confirm it reflects the latest `revision.proposed` event for the current session.
 
 ## 3. Live-mode QA
 

@@ -16,6 +16,7 @@
     "onCommand:arp.clearDraftComments",
     "onCommand:arp.submitStubReview",
     "onCommand:arp.submitReviewToBus",
+    "onCommand:arp.showLatestBusRevision",
     "onCommand:arp.showOutput"
   ],
   "main": "./dist/vscode-extension/src/extension.js",
@@ -44,6 +45,10 @@
       {
         "command": "arp.submitReviewToBus",
         "title": "ARP: Submit Review to Bus"
+      },
+      {
+        "command": "arp.showLatestBusRevision",
+        "title": "ARP: Show Latest Bus Revision"
       },
       {
         "command": "arp.showOutput",

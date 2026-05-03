@@ -3,7 +3,9 @@ import path from "node:path";
 import { SqliteArpStore } from "@arp/store-sqlite";
 import {
   nowIso,
+  type AdapterReviewResult,
   type Artifact,
+  type RevisionProposedEventPayload,
   type ReviewSubmitCommandPayload,
   type ReviewSubmitParams,
   type Session,
@@ -23,6 +25,15 @@ export interface EnqueueDraftReviewToBusResult {
   commandId: string;
   sessionId: string;
   enqueuedAt: string;
+}
+
+export interface LatestBusRevisionResult {
+  dbPath: string;
+  eventId: string;
+  eventSeq: number;
+  sessionId: string;
+  commandId: string;
+  result: AdapterReviewResult;
 }
 
 export async function enqueueDraftReviewToBus(
@@ -72,6 +83,44 @@ export async function enqueueDraftReviewToBus(
     commandId,
     sessionId: input.session.id,
     enqueuedAt: now,
+  };
+}
+
+export async function getLatestRevisionFromBus(
+  workspaceRoot: string,
+  sessionId: string,
+  dbPath?: string,
+): Promise<LatestBusRevisionResult | null> {
+  const resolvedDbPath = dbPath ?? getDefaultBusDbPath(workspaceRoot);
+  const store = new SqliteArpStore({ dbPath: resolvedDbPath });
+  const events = await store.readEventsAfter<RevisionProposedEventPayload>({
+    consumerName: `vscode-session-${sessionId}`,
+    afterSeq: 0,
+    limit: 100,
+    sessionId,
+    eventTypes: ["revision.proposed"],
+  });
+
+  const latest = events.at(-1);
+  if (!latest) {
+    return null;
+  }
+
+  return {
+    dbPath: resolvedDbPath,
+    eventId: latest.id,
+    eventSeq: latest.seq ?? 0,
+    sessionId: latest.sessionId,
+    commandId: latest.payload.commandId,
+    result: {
+      adapter: latest.payload.adapter,
+      mode: latest.payload.mode,
+      normalized: latest.payload.normalized,
+      revision: latest.payload.revision,
+      note: latest.payload.note,
+      prompt: latest.payload.prompt,
+      rawOutput: latest.payload.rawOutput,
+    },
   };
 }
 

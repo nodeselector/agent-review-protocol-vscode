@@ -100,10 +100,11 @@ The VS Code side can now enqueue `review.submit` commands, and a tiny local work
 
 What is still missing:
 
-- event consumption back into the editor UI
+- automatic event consumption back into the editor UI
 - long-running worker loop / daemon behavior
 - subscription-driven projection or read model for review state
+- replacing the direct RPC submit path as the default review UX
 
 ## Next implementation step
 
-Teach the VS Code extension to read `revision.proposed` events from the bus and render results without the direct RPC path.
+Move from manual polling to an event-driven editor flow, likely with a lightweight projection or checkpointed watcher.

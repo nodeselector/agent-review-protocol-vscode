@@ -28,6 +28,7 @@ Local prototype. This repo currently contains:
 - VS Code command-driven review scaffold
 - optional bus-backed review submission path via local SQLite
 - local worker path that consumes `review.submit` and emits `revision.proposed`
+- VS Code read path that loads the latest `revision.proposed` for the current session
 - pi adapter with stub, fallback, and live-gated modes
 - local draft review storage and git diff capture
 - automated QA coverage around the risky paths
@@ -69,6 +70,7 @@ Then open `packages/vscode-extension/` in VS Code, press `F5`, and run:
 3. `ARP: Show Draft Comments`
 4. `ARP: Submit Stub Review`
 5. `ARP: Submit Review to Bus`
+6. `ARP: Show Latest Bus Revision`
 
 You should get a markdown result document plus raw JSON in the ARP output channel.
 
