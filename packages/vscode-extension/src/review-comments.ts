@@ -90,6 +90,17 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       return undefined;
     }
 
+    if (isArpReviewDiffDocument(document.uri)) {
+      const artifact = await captureGitDiffArtifact(this.workspaceRoot);
+      const ranges = parseCommentingRangesFromPatch(artifact.patch, relativePath).map(
+        (range) => new vscode.Range(range.startLine - 1, 0, range.endLine - 1, 0),
+      );
+      return {
+        enableFileComments: ranges.length > 0,
+        ranges,
+      };
+    }
+
     const lastLine = Math.max(document.lineCount - 1, 0);
     return {
       enableFileComments: false,
@@ -279,6 +290,24 @@ function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | 
     return undefined;
   }
   return relative;
+}
+
+function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (!(tab.input instanceof vscode.TabInputTextDiff)) {
+        continue;
+      }
+      if (tab.input.modified.toString() !== documentUri.toString()) {
+        continue;
+      }
+      const originalScheme = tab.input.original.scheme;
+      if (originalScheme === "arp-base" || originalScheme === "arp-empty") {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function asPlainText(body: string | vscode.MarkdownString): string {

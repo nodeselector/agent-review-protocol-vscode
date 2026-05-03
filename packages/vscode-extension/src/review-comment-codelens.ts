@@ -27,6 +27,10 @@ export class ReviewCommentCodeLensProvider implements vscode.CodeLensProvider {
       return [];
     }
 
+    if (isArpReviewDiffDocument(document.uri)) {
+      return [];
+    }
+
     const relativePath = normalizeRelativePath(this.workspaceRoot, document.uri.fsPath);
     if (!relativePath) {
       return [];
@@ -55,4 +59,22 @@ function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | 
     return undefined;
   }
   return relative;
+}
+
+function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (!(tab.input instanceof vscode.TabInputTextDiff)) {
+        continue;
+      }
+      if (tab.input.modified.toString() !== documentUri.toString()) {
+        continue;
+      }
+      const originalScheme = tab.input.original.scheme;
+      if (originalScheme === "arp-base" || originalScheme === "arp-empty") {
+        return true;
+      }
+    }
+  }
+  return false;
 }
