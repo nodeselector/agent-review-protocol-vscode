@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Start pi with the ARP review extension.
-# The extension polls the bus and processes review commands using the LLM.
+# ARP review worker that polls the bus and runs pi per review.
 #
 # Usage:
-#   scripts/arp-pi-review --db /path/to/.arp/bus/arp.db
-#
-# Environment:
-#   ARP_BUS_DB_PATH - path to the SQLite bus database
-#   ARP_POLL_INTERVAL_MS - poll interval in ms (default: 2000)
+#   scripts/arp-pi-review --db /path/to/.arp/bus/arp.db [--poll-ms 2000]
 
 set -euo pipefail
 
@@ -15,7 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXTENSION_PATH="$REPO_ROOT/packages/pi-extension/arp-review-extension.ts"
 
-# Parse --db flag
+POLL_MS=2000
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --db)
@@ -23,7 +19,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --poll-ms)
-      export ARP_POLL_INTERVAL_MS="$2"
+      POLL_MS="$2"
       shift 2
       ;;
     *)
@@ -37,4 +33,31 @@ if [[ -z "${ARP_BUS_DB_PATH:-}" ]]; then
   exit 1
 fi
 
-exec pi -e "$EXTENSION_PATH" --no-session
+export ARP_POLL_INTERVAL_MS="$POLL_MS"
+
+# Check for pending commands using node directly
+check_pending() {
+  node -e "
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync('${ARP_BUS_DB_PATH}');
+    try {
+      const now = new Date().toISOString();
+      db.exec(\`UPDATE commands SET status = 'pending', claimed_by = NULL, lease_until = NULL WHERE status = 'claimed' AND lease_until < '\${now}'\`);
+      const row = db.prepare('SELECT COUNT(*) as count FROM commands WHERE status = \\'pending\\' AND type = \\'review.submit\\'').get();
+      process.exit(row.count > 0 ? 0 : 1);
+    } finally { db.close(); }
+  " 2>/dev/null
+}
+
+echo "ARP pi review worker started. Polling ${ARP_BUS_DB_PATH} every ${POLL_MS}ms."
+
+trap 'echo "ARP pi review worker shutting down."; exit 0' SIGTERM SIGINT
+
+while true; do
+  if check_pending; then
+    echo "Found pending review command. Starting pi..."
+    pi -e "$EXTENSION_PATH" -p "Check for and process any pending ARP review commands." --no-session 2>&1 || echo "Pi exited with code $?"
+    echo "Pi session complete."
+  fi
+  sleep "$(echo "scale=3; $POLL_MS / 1000" | bc)"
+done

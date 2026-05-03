@@ -17,7 +17,7 @@ async function makeWorkspace() {
 test("resolveDefaultBusWorkerLoopCommand finds the local wrapper script", () => {
   const command = resolveDefaultBusWorkerLoopCommand();
   assert.ok(command);
-  assert.match(command, /arp-bus-worker-loop/);
+  assert.match(command, /arp-pi-review/);
 });
 
 test("ensureBusWorkerLoopRunning starts a loop process and reuses it for the same db", async () => {

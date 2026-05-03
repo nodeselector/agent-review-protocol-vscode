@@ -18,7 +18,6 @@ import { Type } from "typebox";
 export default function (pi: ExtensionAPI) {
   let pendingReview: PendingReview | null = null;
   let busDbPath: string | undefined;
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   interface PendingReview {
     commandId: string;
@@ -149,33 +148,6 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  // -- Polling --
-
-  function startPolling() {
-    if (pollTimer || !busDbPath) return;
-    const interval = parseInt(process.env.ARP_POLL_INTERVAL_MS ?? "2000", 10);
-
-    pollTimer = setInterval(() => {
-      if (pendingReview) return; // already processing one
-      try {
-        const review = claimNextReviewCommand(busDbPath!);
-        if (review) {
-          pendingReview = review;
-          pi.sendUserMessage(buildReviewPrompt(review), { deliverAs: "followUp" });
-        }
-      } catch (err) {
-        // silently retry next interval
-      }
-    }, interval);
-  }
-
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = undefined;
-    }
-  }
-
   // -- Prompt building --
 
   function buildReviewPrompt(review: PendingReview): string {
@@ -295,15 +267,36 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     busDbPath = process.env.ARP_BUS_DB_PATH;
     if (!busDbPath) {
-      ctx.ui.notify("ARP: no ARP_BUS_DB_PATH set, review polling disabled", "info");
       return;
     }
-    ctx.ui.notify(`ARP: polling ${busDbPath}`, "info");
-    startPolling();
+
+    // One-shot mode: immediately check for a pending review
+    try {
+      const review = claimNextReviewCommand(busDbPath);
+      if (review) {
+        pendingReview = review;
+        ctx.ui.notify(`ARP: processing review ${review.commandId}`, "info");
+      } else {
+        ctx.ui.notify("ARP: no pending reviews found", "info");
+      }
+    } catch (err) {
+      ctx.ui.notify(`ARP: bus error: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+  });
+
+  // Inject review context before the agent starts
+  pi.on("before_agent_start", async (event, _ctx) => {
+    if (!pendingReview) return;
+    return {
+      systemPrompt:
+        event.systemPrompt +
+        "\n\nYou have a pending ARP code review to process. " +
+        "Read the relevant source files for context, then use the arp_review_respond tool to submit your structured response. " +
+        "Include one resolution for every review comment.",
+    };
   });
 
   pi.on("session_shutdown", async () => {
-    stopPolling();
     pendingReview = null;
   });
 }

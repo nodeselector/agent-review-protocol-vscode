@@ -106,9 +106,13 @@ export function resolveDefaultBusWorkerLoopCommand(): string | null {
   let dir = currentDir;
 
   for (let i = 0; i < 8; i += 1) {
-    const candidate = path.join(dir, "scripts", "arp-bus-worker-loop");
-    if (existsSync(candidate)) {
-      return shellQuote(candidate);
+    const piReviewCandidate = path.join(dir, "scripts", "arp-pi-review");
+    if (existsSync(piReviewCandidate)) {
+      return shellQuote(piReviewCandidate);
+    }
+    const loopCandidate = path.join(dir, "scripts", "arp-bus-worker-loop");
+    if (existsSync(loopCandidate)) {
+      return shellQuote(loopCandidate);
     }
     const parent = path.dirname(dir);
     if (parent === dir) {
