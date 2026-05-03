@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { captureGitDiffArtifact, parseCommentingRangesFromPatch } from "./git-diff.js";
+import { isReviewDocumentUri } from "./review-files.js";
 import path from "node:path";
 
 export class ReviewCommentCodeLensProvider implements vscode.CodeLensProvider {
@@ -62,19 +63,5 @@ function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | 
 }
 
 function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
-  for (const group of vscode.window.tabGroups.all) {
-    for (const tab of group.tabs) {
-      if (!(tab.input instanceof vscode.TabInputTextDiff)) {
-        continue;
-      }
-      if (tab.input.modified.toString() !== documentUri.toString()) {
-        continue;
-      }
-      const originalScheme = tab.input.original.scheme;
-      if (originalScheme === "arp-base" || originalScheme === "arp-empty") {
-        return true;
-      }
-    }
-  }
-  return false;
+  return isReviewDocumentUri(documentUri);
 }

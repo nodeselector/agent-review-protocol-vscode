@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 import * as vscode from "vscode";
@@ -7,8 +8,11 @@ import { loadReviewStore } from "./review-store.js";
 import type { AdapterReviewResult, ChangedFile, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
 
 const execFileAsync = promisify(execFile);
-const BASE_SCHEME = "arp-base";
-const EMPTY_SCHEME = "arp-empty";
+const REVIEW_SCHEME = "arp-review";
+
+export interface ReviewDocumentQuery {
+  side: "base" | "working" | "empty";
+}
 
 export class ReviewFilesProvider implements vscode.TreeDataProvider<ReviewFileNode>, vscode.Disposable {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<ReviewFileNode | undefined>();
@@ -106,21 +110,26 @@ export class ReviewFileNode extends vscode.TreeItem {
   }
 }
 
-export class ReviewBaseContentProvider implements vscode.TextDocumentContentProvider {
+export class ReviewContentProvider implements vscode.TextDocumentContentProvider {
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    if (uri.scheme === EMPTY_SCHEME) {
+    const query = parseReviewDocumentQuery(uri);
+    if (query.side === "empty") {
       return "";
     }
 
     const workspaceRoot = uri.authority;
-    const filePath = uri.path.startsWith("/") ? uri.path.slice(1) : uri.path;
+    const filePath = getRelativePathFromReviewUri(uri);
 
     try {
-      const { stdout } = await execFileAsync("git", ["show", `HEAD:${filePath}`], {
-        cwd: workspaceRoot,
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      return stdout;
+      if (query.side === "base") {
+        const { stdout } = await execFileAsync("git", ["show", `HEAD:${filePath}`], {
+          cwd: workspaceRoot,
+          maxBuffer: 10 * 1024 * 1024,
+        });
+        return stdout;
+      }
+
+      return await fs.readFile(path.join(workspaceRoot, filePath), "utf8");
     } catch {
       return "";
     }
@@ -128,18 +137,51 @@ export class ReviewBaseContentProvider implements vscode.TextDocumentContentProv
 }
 
 export function createReviewDiffUris(workspaceRoot: string, file: ChangedFile): { left: vscode.Uri; right: vscode.Uri } {
-  const relativePath = file.path.replace(/\\/g, "/");
-  const baseUri = vscode.Uri.from({ scheme: BASE_SCHEME, authority: workspaceRoot, path: `/${relativePath}` });
-  const emptyUri = vscode.Uri.from({ scheme: EMPTY_SCHEME, authority: workspaceRoot, path: `/${relativePath}` });
-  const workspaceUri = vscode.Uri.file(path.join(workspaceRoot, relativePath));
-
   switch (file.status) {
     case "added":
-      return { left: emptyUri, right: workspaceUri };
+      return {
+        left: createReviewDocumentUri(workspaceRoot, file.path, "empty"),
+        right: createReviewDocumentUri(workspaceRoot, file.path, "working"),
+      };
     case "deleted":
-      return { left: baseUri, right: emptyUri };
+      return {
+        left: createReviewDocumentUri(workspaceRoot, file.path, "base"),
+        right: createReviewDocumentUri(workspaceRoot, file.path, "empty"),
+      };
     default:
-      return { left: baseUri, right: workspaceUri };
+      return {
+        left: createReviewDocumentUri(workspaceRoot, file.path, "base"),
+        right: createReviewDocumentUri(workspaceRoot, file.path, "working"),
+      };
+  }
+}
+
+export function createReviewDocumentUri(
+  workspaceRoot: string,
+  relativePath: string,
+  side: ReviewDocumentQuery["side"],
+): vscode.Uri {
+  return vscode.Uri.from({
+    scheme: REVIEW_SCHEME,
+    authority: workspaceRoot,
+    path: `/${relativePath.replace(/\\/g, "/")}`,
+    query: JSON.stringify({ side } satisfies ReviewDocumentQuery),
+  });
+}
+
+export function isReviewDocumentUri(uri: vscode.Uri): boolean {
+  return uri.scheme === REVIEW_SCHEME;
+}
+
+export function getRelativePathFromReviewUri(uri: vscode.Uri): string {
+  return uri.path.startsWith("/") ? uri.path.slice(1) : uri.path;
+}
+
+export function parseReviewDocumentQuery(uri: vscode.Uri): ReviewDocumentQuery {
+  try {
+    return JSON.parse(uri.query) as ReviewDocumentQuery;
+  } catch {
+    return { side: "working" };
   }
 }
 
@@ -156,8 +198,7 @@ function iconForStatus(status: ChangedFile["status"]): string {
   }
 }
 
-export const REVIEW_BASE_SCHEME = BASE_SCHEME;
-export const REVIEW_EMPTY_SCHEME = EMPTY_SCHEME;
+export const REVIEW_SCHEME_NAME = REVIEW_SCHEME;
 
 function buildFileReviewSummary(commentCount: number, resolutions: CommentResolution[]): ReviewFileSummary {
   if (commentCount === 0) {

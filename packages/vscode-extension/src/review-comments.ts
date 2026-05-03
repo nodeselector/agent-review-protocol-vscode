@@ -9,6 +9,12 @@ import {
   updateDraftComment,
 } from "./review-store.js";
 import { captureGitDiffArtifact, parseCommentingRangesFromPatch } from "./git-diff.js";
+import {
+  createReviewDocumentUri,
+  getRelativePathFromReviewUri,
+  isReviewDocumentUri,
+  parseReviewDocumentQuery,
+} from "./review-files.js";
 import type { AdapterReviewResult, Comment, CommentResolution, ResolutionStatus } from "../../protocol/src/index.js";
 
 const COMMENT_CONTROLLER_ID = "arp-review";
@@ -64,7 +70,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       }
 
       const thread = this.controller.createCommentThread(
-        vscode.Uri.file(path.join(this.workspaceRoot, comment.path)),
+        createThreadUri(this.workspaceRoot, comment),
         toRange(comment),
         comments,
       );
@@ -85,7 +91,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
       return undefined;
     }
 
-    const relativePath = normalizeRelativePath(this.workspaceRoot, document.uri.fsPath);
+    const relativePath = getRelativePathForUri(this.workspaceRoot, document.uri);
     if (!relativePath) {
       return undefined;
     }
@@ -119,7 +125,7 @@ export class ReviewCommentsManager implements vscode.Disposable, vscode.Commenti
     }
 
     await ensureSession(this.workspaceRoot);
-    const relativePath = normalizeRelativePath(this.workspaceRoot, reply.thread.uri.fsPath);
+    const relativePath = getRelativePathForUri(this.workspaceRoot, reply.thread.uri);
     if (!relativePath) {
       return undefined;
     }
@@ -284,30 +290,27 @@ function toRange(comment: Pick<Comment, "line" | "startLine" | "endLine">): vsco
   return new vscode.Range(startLine, 0, endLine, 0);
 }
 
-function normalizeRelativePath(workspaceRoot: string, fsPath: string): string | undefined {
-  const relative = path.relative(workspaceRoot, fsPath).replace(/\\/g, "/");
+function getRelativePathForUri(workspaceRoot: string, uri: vscode.Uri): string | undefined {
+  if (isReviewDocumentUri(uri)) {
+    return getRelativePathFromReviewUri(uri);
+  }
+
+  const relative = path.relative(workspaceRoot, uri.fsPath).replace(/\\/g, "/");
   if (!relative || relative.startsWith("../")) {
     return undefined;
   }
   return relative;
 }
 
-function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
-  for (const group of vscode.window.tabGroups.all) {
-    for (const tab of group.tabs) {
-      if (!(tab.input instanceof vscode.TabInputTextDiff)) {
-        continue;
-      }
-      if (tab.input.modified.toString() !== documentUri.toString()) {
-        continue;
-      }
-      const originalScheme = tab.input.original.scheme;
-      if (originalScheme === "arp-base" || originalScheme === "arp-empty") {
-        return true;
-      }
-    }
+function createThreadUri(workspaceRoot: string, comment: Comment): vscode.Uri {
+  if ((comment.scope ?? "review") === "review") {
+    return createReviewDocumentUri(workspaceRoot, comment.path, "working");
   }
-  return false;
+  return vscode.Uri.file(path.join(workspaceRoot, comment.path));
+}
+
+function isArpReviewDiffDocument(documentUri: vscode.Uri): boolean {
+  return isReviewDocumentUri(documentUri) && parseReviewDocumentQuery(documentUri).side === "working";
 }
 
 function asPlainText(body: string | vscode.MarkdownString): string {

@@ -13,11 +13,10 @@ import { ReviewCommentsManager, DraftReviewComment } from "./review-comments.js"
 import { ReviewCommentCodeLensProvider } from "./review-comment-codelens.js";
 import {
   createReviewDiffUris,
-  ReviewBaseContentProvider,
+  ReviewContentProvider,
   ReviewFileNode,
   ReviewFilesProvider,
-  REVIEW_BASE_SCHEME,
-  REVIEW_EMPTY_SCHEME,
+  REVIEW_SCHEME_NAME,
 } from "./review-files.js";
 import { ReviewOverviewProvider } from "./review-overview.js";
 import { ReviewStatusBar } from "./review-status-bar.js";
@@ -40,7 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const reviewOverview = new ReviewOverviewProvider();
   const reviewStatusBar = new ReviewStatusBar();
   const reviewCommentCodeLensProvider = new ReviewCommentCodeLensProvider();
-  const reviewBaseContentProvider = new ReviewBaseContentProvider();
+  const reviewContentProvider = new ReviewContentProvider();
   const reviewFilesView = vscode.window.createTreeView("arpReviewFiles", { treeDataProvider: reviewFiles });
   const reviewOverviewView = vscode.window.createTreeView("arpReviewOverview", { treeDataProvider: reviewOverview, showCollapseAll: false });
   context.subscriptions.push(
@@ -52,8 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
     reviewFilesView,
     reviewOverviewView,
     vscode.languages.registerCodeLensProvider({ scheme: "file" }, reviewCommentCodeLensProvider),
-    vscode.workspace.registerTextDocumentContentProvider(REVIEW_BASE_SCHEME, reviewBaseContentProvider),
-    vscode.workspace.registerTextDocumentContentProvider(REVIEW_EMPTY_SCHEME, reviewBaseContentProvider),
+    vscode.workspace.registerTextDocumentContentProvider(REVIEW_SCHEME_NAME, reviewContentProvider),
   );
   void initializeReviewUi(getWorkspaceRoot(), getExtensionConfig().busDbPath || undefined, {
     reviewComments,
