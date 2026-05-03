@@ -86,54 +86,47 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Auto-poll for review requests from agents
   let reviewRequestPollTimer: ReturnType<typeof setInterval> | undefined;
-  let dismissedRequestIds = new Set<string>();
+  let pollInProgress = false;
   function startReviewRequestPolling() {
     if (reviewRequestPollTimer) {
       return;
     }
     const pollMs = 3000;
     reviewRequestPollTimer = setInterval(async () => {
-      if (activeReviewRequest) {
+      if (activeReviewRequest || pollInProgress) {
         return;
       }
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) {
         return;
       }
-      const config = getExtensionConfig();
-      const request = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
-      if (!request || dismissedRequestIds.has(request.requestId)) {
-        return;
+      pollInProgress = true;
+      try {
+        const config = getExtensionConfig();
+        const request = await pollForReviewRequests(workspaceRoot, config.busDbPath || undefined);
+        if (!request || activeReviewRequest) {
+          return;
+        }
+
+        logJson("reviewRequest.auto", request);
+        activeReviewRequest = request;
+        await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
+        await ensureSession(workspaceRoot);
+        await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
+          reviewComments,
+          reviewFiles,
+          reviewOverview,
+          reviewStatusBar,
+          reviewCommentCodeLensProvider,
+        });
+        reviewCommentCodeLensProvider.setHasActiveSession(true);
+        reviewComments.setHasActiveSession(true);
+        void vscode.window.showInformationMessage(
+          `Agent requested review (iteration ${request.iteration}): ${request.changedFiles.length} changed files. Add comments and submit.`,
+        );
+      } finally {
+        pollInProgress = false;
       }
-
-      await reviewOverview.refresh();
-      logJson("reviewRequest.auto", request);
-      const action = await vscode.window.showInformationMessage(
-        `Agent requested review (iteration ${request.iteration}): ${request.changedFiles.length} changed files. ${request.summary ?? ""}`,
-        "Open Review",
-        "Dismiss",
-      );
-
-      if (action !== "Open Review") {
-        dismissedRequestIds.add(request.requestId);
-        return;
-      }
-
-      activeReviewRequest = request;
-      await bindReviewSession(workspaceRoot, request.sessionId, request.iteration);
-      await ensureSession(workspaceRoot);
-      await initializeReviewUi(workspaceRoot, config.busDbPath || undefined, {
-        reviewComments,
-        reviewFiles,
-        reviewOverview,
-        reviewStatusBar,
-        reviewCommentCodeLensProvider,
-      });
-      reviewCommentCodeLensProvider.setHasActiveSession(true);
-      reviewComments.setHasActiveSession(true);
-      void vscode.window.showInformationMessage(
-        `Review iteration ${request.iteration} started for ${request.changedFiles.length} files. Add your comments and submit.`,
-      );
     }, pollMs);
   }
   startReviewRequestPolling();
